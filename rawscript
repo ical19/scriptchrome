@@ -1,0 +1,817 @@
+(function() {
+    'use strict';
+
+    // Inject Material Icons font
+    //https://tunastoyota.crm5.dynamics.com/api/data/v9.0/accounts(28fc7de6-ee9d-ec11-b400-000d3a823d89)
+    const materialIconsLink = document.createElement('link');
+    materialIconsLink.href = 'https://fonts.googleapis.com/icon?family=Material+Icons';
+    materialIconsLink.rel = 'stylesheet';
+    document.head.appendChild(materialIconsLink);
+
+    // Create modal container
+    const modal = document.createElement('div');
+    modal.style.position = 'fixed';
+    modal.style.bottom = '10px';
+    modal.style.right = '10px';
+    modal.style.width = '250px';
+    modal.style.height = 'auto';
+    modal.style.backgroundColor = '#fff';
+    modal.style.border = '1px solid #ccc';
+    modal.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.1)';
+    modal.style.padding = '0';
+    modal.style.borderRadius = '8px'; // Rounded corners
+    modal.style.display = 'none'; // Start hidden
+    modal.style.zIndex = '1000';
+    modal.id = 'custom-modal';
+
+    // Create title bar
+    const titleBar = document.createElement('div');
+    titleBar.style.display = 'flex';
+    titleBar.style.alignItems = 'center';
+    titleBar.style.justifyContent = 'space-between';
+    titleBar.style.padding = '5px 10px';
+    titleBar.style.backgroundColor = '#f5f5f5';
+    titleBar.style.borderBottom = '1px solid #ccc';
+    titleBar.style.borderTopLeftRadius = '8px';
+    titleBar.style.borderTopRightRadius = '8px';
+
+    const titleText = document.createElement('span');
+    titleText.style.fontSize = '14px';
+    titleText.style.color = '#333';
+    titleText.style.overflow = 'hidden';
+    titleText.style.textOverflow = 'ellipsis';
+    titleText.style.whiteSpace = 'nowrap';
+    titleText.style.marginRight = '10px';
+    titleText.innerText = 'Magenta Project v 2.0';
+
+    const windowControls = document.createElement('div');
+    windowControls.style.display = 'flex';
+    windowControls.style.alignItems = 'center';
+
+    const minimizeBtn = document.createElement('span');
+    minimizeBtn.style.width = '12px';
+    minimizeBtn.style.height = '12px';
+    minimizeBtn.style.backgroundColor = '#f6c23e';
+    minimizeBtn.style.borderRadius = '50%';
+    minimizeBtn.style.marginRight = '5px';
+    minimizeBtn.style.cursor = 'pointer';
+
+    const maximizeBtn = document.createElement('span');
+    maximizeBtn.style.width = '12px';
+    maximizeBtn.style.height = '12px';
+    maximizeBtn.style.backgroundColor = '#36cfc9';
+    maximizeBtn.style.borderRadius = '50%';
+    maximizeBtn.style.marginRight = '5px';
+    maximizeBtn.style.cursor = 'pointer';
+
+    const closeBtn = document.createElement('span');
+    closeBtn.style.width = '12px';
+    closeBtn.style.height = '12px';
+    closeBtn.style.backgroundColor = '#e74c3c';
+    closeBtn.style.borderRadius = '50%';
+    closeBtn.style.cursor = 'pointer';
+
+    windowControls.appendChild(minimizeBtn);
+    windowControls.appendChild(maximizeBtn);
+    windowControls.appendChild(closeBtn);
+    titleBar.appendChild(titleText);
+    titleBar.appendChild(windowControls);
+    modal.appendChild(titleBar);
+
+    // Add buttons in a grid below the title bar
+    const buttonGrid = document.createElement('div');
+    buttonGrid.style.display = 'grid';
+    buttonGrid.style.gridTemplateColumns = 'repeat(4, 1fr)';
+    buttonGrid.style.gap = '5px';
+    buttonGrid.style.padding = '10px';
+    buttonGrid.style.borderBottom = '1px solid #ccc';
+
+    const createButton = (icon, id, active) => {
+        const btn = document.createElement('div');
+        btn.style.display = 'flex';
+        btn.style.justifyContent = 'center';
+        btn.style.alignItems = 'center';
+        btn.style.backgroundColor = '#f1f1f1';
+        btn.style.borderRadius = '4px';
+        btn.style.cursor = 'pointer';
+        btn.style.padding = '10px';
+        btn.id = id;
+        btn.innerHTML = active ? `<i class="material-icons" style="color: #6200ea;">${icon}</i>` : `<i class="material-icons" style="color: gray;" pointer-events: none;>${icon}</i>`;
+        return btn;
+    };
+
+    buttonGrid.appendChild(createButton('person', 'calendar-btn', true));
+    buttonGrid.appendChild(createButton('phone', 'chart-btn', true));
+    buttonGrid.appendChild(createButton('business', 'print-btn',true));
+    buttonGrid.appendChild(createButton('contact_phone', 'find-phone-number',true));
+    modal.appendChild(buttonGrid);
+
+    // Add content to the modal
+    const modalContent = document.createElement('div');
+    modalContent.style.padding = '10px';
+    modalContent.style.transition = 'opacity 0.5s ease';
+    modalContent.innerHTML = `
+        <ul id="modal-listview" style="list-style-type: none; padding: 0; margin: 0; font-family: 'Roboto', sans-serif;">
+            <li style="display: flex; align-items: center; margin-bottom: 10px; padding: 10px; background-color: #f1f1f1; border-radius: 4px; cursor: pointer;">
+                <i class="material-icons" style="margin-right: 10px; color: #6200ea;">badge</i>
+                <span id="find-police-number" style="flex: 1;">Find Police Number</span>
+            </li>
+            <li style="display: flex; align-items: center; margin-bottom: 10px; padding: 10px; background-color: #f1f1f1; border-radius: 4px; cursor: pointer;">
+                <i class="material-icons" style="margin-right: 10px; color: #6200ea;">insert_drive_file</i>
+                <span id="schema-btn" style="flex: 1;">Summary database</span>
+            </li>
+            <li style="display: flex; align-items: center; padding: 10px; background-color: #f1f1f1; border-radius: 4px; cursor: pointer;">
+                <i class="material-icons" style="margin-right: 10px; color: #6200ea;">insert_chart</i>
+                <span id="convert-newline-comma" style="flex: 1;">Convert to CSV</span>
+            </li>
+        </ul>
+    `;
+    modal.appendChild(modalContent);
+
+    // Add footer to the modal
+    const footer = document.createElement('div');
+    footer.style.textAlign = 'center';
+    footer.style.padding = '5px';
+    footer.style.borderTop = '1px solid #ccc';
+    footer.style.fontSize = '12px';
+    footer.style.color = '#777';
+    footer.innerText = 'Design by Ical';
+    modal.appendChild(footer);
+
+    // Add modal to the body
+    document.body.appendChild(modal);
+
+    // Function to toggle modal visibility
+    function toggleModal() {
+        if (modal.style.display === 'none') {
+            modal.style.display = 'block';
+        } else {
+            modal.style.display = 'none';
+        }
+    }
+
+    // Function to collapse the modal
+    function collapseModal() {
+        modal.style.height = '50px'; // Adjust height for collapsed state
+        modalContent.style.opacity = '0'; // Hide the listview with fade out effect
+        setTimeout(() => {
+            modalContent.style.display = 'none'; // Hide the listview
+        }, 500); // Match timeout with opacity transition duration
+        buttonGrid.style.display = 'grid'; // Show the grid buttons
+        titleBar.style.borderBottom = 'none'; // Remove the border
+        footer.style.display = 'none'; // Hide the footer
+    }
+
+    // Function to expand the modal
+    function expandModal() {
+        modal.style.height = 'auto'; // Restore original height
+        modalContent.style.display = 'block'; // Show the listview
+        modalContent.style.opacity = '1'; // Fade in effect for listview
+        buttonGrid.style.display = 'grid'; // Show the grid buttons
+        titleBar.style.borderBottom = '1px solid #ccc'; // Restore the border
+        footer.style.display = 'block'; // Show the footer
+    }
+
+    // Event listener for keypress
+    document.addEventListener('keydown', function(event) {
+        if (event.key === '/') {
+            toggleModal();
+        }
+    });
+
+    // Event listeners for window controls
+    minimizeBtn.addEventListener('click', function() {
+        modal.style.display = 'none';
+    });
+
+    maximizeBtn.addEventListener('click', function() {
+        if (modalContent.style.display === 'none') {
+            expandModal();
+        } else {
+            collapseModal();
+        }
+    });
+
+    closeBtn.addEventListener('click', function() {
+        modal.style.display = 'none';
+    });
+
+    // Event listeners for grid buttons
+    document.getElementById('print-btn').addEventListener('click', function() {
+        (function() {
+            'use strict';
+
+            // Prompt user for input
+            var userInput = prompt("Pencarian nama perusahaan atau nama owner, gunakan nomor rangka :");
+
+            if (userInput) {
+                var inputs = userInput.split(",").map(function(item) {
+                    return item.trim();
+                }).filter(function(item) {
+                    return item !== "";
+                });
+
+                if (inputs.length > 0) {
+                    var promises = inputs.map(function(input) {
+                        // Request pertama, mengambil _xts_customerid_value
+                        var fetchUrl = 'https://tunastoyota.crm5.dynamics.com/api/data/v9.0/xts_vehicleinformations?fetchXml=' + encodeURIComponent(
+                            `<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false" returntotalrecordcount="true" page="1" count="50" no-lock="false">
+                        <entity name="xts_vehicleinformation">
+                            <attribute name="statecode"/>
+                            <attribute name="xts_vehicleidentificationnumber"/>
+                            <attribute name="xts_platenumber"/>
+                            <attribute name="xts_customerid"/>
+                            <attribute name="xts_businessunitid"/>
+                            <filter type="and">
+                                <condition attribute="statecode" operator="eq" value="0"/>
+                            </filter>
+                            <attribute name="xts_manufacturerid"/>
+                            <attribute name="xts_vehicleinformationid"/>
+                            <attribute name="xts_productionyear"/>
+                            <attribute name="xts_productdescription"/>
+                            <attribute name="xts_productid"/>
+                            <order attribute="xts_businessunitid" descending="false"/>
+                            <order attribute="xts_vehicleidentificationnumber" descending="false"/>
+                            <filter type="or" isquickfindfields="1">
+                                <condition attribute="xts_vehicleidentificationnumber" operator="like" value="${input}%"/>
+                                <condition attribute="xts_productionyear" operator="like" value="${input}%"/>
+                                <condition attribute="xts_productdescription" operator="like" value="${input}%"/>
+                                <condition attribute="xts_productidname" operator="like" value="${input}%"/>
+                                <condition attribute="xts_platenumber" operator="like" value="${input}%"/>
+                                <condition attribute="xts_manufactureridname" operator="like" value="${input}%"/>
+                                <condition attribute="xto_genericnumber" operator="like" value="${input}%"/>
+                                <condition attribute="xts_customeridname" operator="like" value="${input}%"/>
+                                <condition attribute="xts_businessunitidname" operator="like" value="${input}%"/>
+                            </filter>
+                        </entity>
+                    </fetch>`
+                );
+
+                        return fetch(fetchUrl)
+                            .then(function(response) {
+                            return response.json();
+                        })
+                            .then(function(data) {
+                            if (data && data.value && data.value.length > 0) {
+                                // Ambil _xts_customerid_value dari request pertama
+                                var customerId = data.value[0]._xts_customerid_value;
+
+                                // Request kedua menggunakan customerId dari request pertama
+                                var fetchUrl2 = 'https://tunastoyota.crm5.dynamics.com/api/data/v9.0/accounts(' + customerId + ')';
+                                return fetch(fetchUrl2)
+                                    .then(function(response) {
+                                    return response.json();
+                                })
+                                    .then(function(accountData) {
+                                    // Cek dan ambil telephone3
+                                    if (accountData && accountData.name) {
+                                        return input + " : " + accountData.name;
+                                    } else {
+                                        return "Data telephone3 tidak ditemukan untuk customerId: " + customerId;
+                                    }
+                                });
+                            } else {
+                                return "Data tidak ditemukan untuk input: " + input;
+                            }
+                        })
+                            .catch(function(error) {
+                            return 'Terjadi kesalahan untuk input: ' + input + ', Error: ' + error.message;
+                        });
+                    });
+
+                    // Menampilkan hasil akhir
+                    Promise.all(promises).then(function(results) {
+                        var newWindow = window.open("", "newWindow", "width=300,height=200");
+                        newWindow.document.write('<html><head><title>Magenta Project</title></head><body>');
+                        results.forEach(function(result) {
+                            newWindow.document.write('<p>' + result + '</p>');
+                        });
+                        newWindow.document.write('</body></html>');
+                        newWindow.document.close();
+                    }).catch(function(err) {
+                        var newWindow = window.open();
+                        newWindow.document.write('<html><head><title>Error</title></head><body>');
+                        newWindow.document.write('<h1>Terjadi kesalahan dalam menyelesaikan permintaan</h1>');
+                        newWindow.document.write('<p>' + err.message + '</p>');
+                        newWindow.document.write('</body></html>');
+                        newWindow.document.close();
+                    });
+
+                } else {
+                    alert("Input tidak valid atau tidak ada nilai yang dimasukkan.");
+                }
+            } else {
+                alert("Input tidak valid atau dibatalkan.");
+            }
+        })();
+
+    });
+
+
+    document.getElementById('chart-btn').addEventListener('click', function() {
+        (function() {
+            'use strict';
+
+            // Prompt user for input
+            var userInput = prompt("Pencarian nomor telepon driver, gunakan Nomor polisi:");
+
+            if (userInput) {
+                var inputs = userInput.split(",").map(function(item) {
+                    return item.trim();
+                }).filter(function(item) {
+                    return item !== "";
+                });
+
+                if (inputs.length > 0) {
+                    var promises = inputs.map(function(input) {
+                        return fetch('https://tunastoyota.crm5.dynamics.com/api/data/v9.0/xts_workorders?fetchXml=' + encodeURIComponent('<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false" savedqueryid="edb1eb56-b65a-4a8a-a190-2b4c80d62d79" returntotalrecordcount="true" page="1" count="50" no-lock="false"><entity name="xts_workorder"><attribute name="xts_transactiondate"/><attribute name="xts_contactpersonphone"/><order attribute="xts_transactiondate" descending="true"/><order attribute="xts_workorder" descending="true"/><filter type="and"><condition attribute="statecode" operator="eq" value="0"/></filter><link-entity name="account" from="accountid" to="xts_customerid" visible="false" link-type="outer" alias="a_2896a0f8ff0eec11b6e500224816bfa8"><attribute name="xts_customerclassid"/></link-entity><attribute name="xts_workorderid"/><filter type="or" isquickfindfields="1"><condition attribute="xts_platenumber" operator="like" value="' + input + '%"/></filter></entity></fetch>')).then(function(response) {
+                            return response.json();
+                        }).then(function(data) {
+                            if (data && data.value && data.value.length > 0) {
+                                return input + " : " + data.value[0].xts_contactpersonphone;
+                            } else {
+                                return "Data tidak ditemukan untuk input: " + input;
+                            }
+                        }).catch(function(error) {
+                            return 'Terjadi kesalahan untuk input: ' + input + ', Error: ' + error.message;
+                        });
+                    });
+
+                    Promise.all(promises).then(function(results) {
+                        var newWindow = window.open("", "newWindow", "width=300,height=200");
+                        newWindow.document.write('<html><head><title>Magenta Project</title></head><body>');
+                        results.forEach(function(result) {
+                            newWindow.document.write('<p>' + result + '</p>');
+                        });
+                        newWindow.document.write('</body></html>');
+                        newWindow.document.close();
+                    }).catch(function(err) {
+                        var newWindow = window.open();
+                        newWindow.document.write('<html><head><title>Error</title></head><body>');
+                        newWindow.document.write('<h1>Terjadi kesalahan dalam menyelesaikan permintaan</h1>');
+                        newWindow.document.write('<p>' + err.message + '</p>');
+                        newWindow.document.write('</body></html>');
+                        newWindow.document.close();
+                    });
+
+                } else {
+                    alert("Input tidak valid atau tidak ada nilai yang dimasukkan.");
+                }
+            } else {
+                alert("Input tidak valid atau dibatalkan.");
+            }
+        })();
+
+    });
+
+    document.getElementById('calendar-btn').addEventListener('click', function() {
+        (function() {
+            'use strict';
+
+            var userInput = prompt("Pencarian nama driver, gunakan nomor polisi:");
+
+            if (userInput) {
+                var inputs = userInput.split(",").map(item => item.trim()).filter(item => item !== "");
+
+                if (inputs.length > 0) {
+                    var promises = inputs.map(input => {
+                        var fetchUrl = 'https://tunastoyota.crm5.dynamics.com/api/data/v9.0/xts_workorders?fetchXml=' + encodeURIComponent(
+                            `<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false" savedqueryid="edb1eb56-b65a-4a8a-a190-2b4c80d62d79" returntotalrecordcount="true" page="1" count="50" no-lock="false"><entity name="xts_workorder"><order attribute="xts_transactiondate" descending="true"/><order attribute="xts_workorder" descending="true"/><filter type="and"><condition attribute="statecode" operator="eq" value="0"/></filter><link-entity name="account" from="accountid" to="xts_customerid" visible="false" link-type="outer" alias="a_2896a0f8ff0eec11b6e500224816bfa8"><attribute name="xts_customerclassid"/></link-entity><attribute name="xts_workorderid"/><filter type="or" isquickfindfields="1"><condition attribute="xts_platenumber" operator="like" value="${input}%"/></filter><attribute name="xts_contactpersonid"/><attribute name="xts_contactpersonphone"/></entity></fetch>`
+                );
+
+                        return fetch(fetchUrl)
+                            .then(response => response.json())
+                            .then(data => {
+                            if (data && data.value && data.value.length > 0) {
+                                var customerId = data.value[0]._xts_contactpersonid_value;
+                                var fetchUrl2 = 'https://tunastoyota.crm5.dynamics.com/api/data/v9.0/contacts(' + customerId + ')';
+                                return fetch(fetchUrl2)
+                                    .then(response => response.json())
+                                    .then(accountData => {
+                                    if (accountData && accountData.fullname) {
+                                        return { plate: input, name: accountData.fullname.toUpperCase() };
+                                    } else {
+                                        return { plate: input, name: "Data tidak ditemukan" };
+                                    }
+                                });
+                            } else {
+                                return { plate: input, name: "Data tidak ditemukan" };
+                            }
+                        })
+                            .catch(error => ({ plate: input, name: 'Error: ' + error.message }));
+                    });
+
+                    Promise.all(promises).then(results => {
+                        var newWindow = window.open("", "newWindow", "width=400,height=300");
+                        newWindow.document.write('<html><head><title>Magenta Project</title></head><body>');
+                        newWindow.document.write('<h1>Magenta Project</h1>');
+                        // Tambahkan tombol Export to Excel
+                        newWindow.document.write('<button id="exportBtn">Export to Excel</button>');
+                        newWindow.document.getElementById("exportBtn").addEventListener("click", function() {
+                            var csvContent = "data:text/csv;charset=utf-8,No. Polisi, Nama\n" +
+                                results.map(result => `${result.plate},${result.name}`).join("\n");
+                            var encodedUri = encodeURI(csvContent);
+                            var link = newWindow.document.createElement("a");
+                            link.setAttribute("href", encodedUri);
+                            link.setAttribute("download", "export_data.csv");
+                            newWindow.document.body.appendChild(link);
+                            link.click();
+                        });
+                        results.forEach(result => {
+                            newWindow.document.write('<p>' + result.plate + ' : ' + result.name + '</p>');
+                        });
+                        newWindow.document.write('</body></html>');
+                        newWindow.document.close();
+                    }).catch(err => {
+                        alert("Terjadi kesalahan: " + err.message);
+                    });
+                } else {
+                    alert("Input tidak valid atau tidak ada nilai yang dimasukkan.");
+                }
+            } else {
+                alert("Input tidak valid atau dibatalkan.");
+            }
+        })();
+
+    });
+
+    document.getElementById('schema-btn').addEventListener('click', function() {
+        (function() {
+            'use strict';
+
+            var userInput = prompt("Pencarian nomor rangka:");
+
+            if (userInput) {
+                var inputs = userInput.split(",").map(item => item.trim()).filter(item => item !== "");
+
+                if (inputs.length > 0) {
+                    var vinPromises = inputs.map((input, index) => {
+                        var fetchUrl = 'https://tunastoyota.crm5.dynamics.com/api/data/v9.0/xts_vehicleinformations?fetchXml=' + encodeURIComponent(
+                            `<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false" returntotalrecordcount="true" page="1" count="50" no-lock="false">
+                        <entity name="xts_vehicleinformation">
+                            <attribute name="xts_platenumber"/>
+                            <attribute name="xts_productionyear"/>
+                            <attribute name="xts_productdescription"/>
+                            <attribute name="xts_productid"/>
+                            <filter type="or" isquickfindfields="1">
+                                <condition attribute="xts_vehicleidentificationnumber" operator="like" value="${input}%"/>
+                            </filter>
+                        </entity>
+                    </fetch>`
+                );
+
+                        return fetch(fetchUrl)
+                            .then(response => response.json())
+                            .then(data => {
+                            if (data && data.value && data.value.length > 0) {
+                                return {
+                                    index: index + 1,
+                                    plate: data.value[0].xts_platenumber,
+                                    vin: input,
+                                    TypeKendaraan: data.value[0].xts_productdescription,
+                                    TahunProduksi: data.value[0].xts_productionyear
+                                };
+                            } else {
+                                return null;
+                            }
+                        })
+                            .catch(error => null);
+                    });
+
+                    Promise.all(vinPromises).then(results => {
+                        var validResults = results.filter(result => result !== null);
+
+                        if (validResults.length > 0) {
+                            var searchPromises = validResults.map(result => {
+                                var fetchUrl = 'https://tunastoyota.crm5.dynamics.com/api/data/v9.0/xts_workorders?fetchXml=' + encodeURIComponent(
+                                    `<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false" savedqueryid="edb1eb56-b65a-4a8a-a190-2b4c80d62d79" returntotalrecordcount="true" page="1" count="50" no-lock="false">
+                                <entity name="xts_workorder">
+                                    <order attribute="xts_transactiondate" descending="true"/>
+                                    <order attribute="xts_workorder" descending="true"/>
+                                    <filter type="and">
+                                        <condition attribute="statecode" operator="ne" value="2"/>
+                                    </filter>
+                                    <attribute name="xts_workorderid"/>
+                                    <attribute name="xts_contactpersonid"/>
+                                    <attribute name="xts_contactpersonphone"/>
+                                    <attribute name="xts_customerid"/>
+                                    <attribute name="xts_workorder"/>
+                                    <attribute name="xts_transactiondate"/>
+                                    <filter type="or" isquickfindfields="1">
+                                        <condition attribute="xts_platenumber" operator="like" value="${result.plate}%"/>
+                                    </filter>
+                                </entity>
+                            </fetch>`
+                        );
+
+                                return fetch(fetchUrl)
+                                    .then(response => response.json())
+                                    .then(data => {
+                                    var workOrder = data.value?.[0]?.xts_workorder || "";
+                                    var transactionDate = data.value?.[0]?.xts_transactiondate?.substring(0, 10) || "";
+                                    var customerId = data.value?.[0]?._xts_customerid_value || "";
+                                    var contactPersonId = data.value?.[0]?._xts_contactpersonid_value || "";
+                                    var contactPersonPhone = data.value?.[0]?.xts_contactpersonphone || "";
+
+                                    // Fetch customer name
+                                    return fetch(`https://tunastoyota.crm5.dynamics.com/api/data/v9.0/accounts(${customerId})`)
+                                        .then(response => response.json())
+                                        .then(customerData => {
+                                        var ownerPhone = customerData?.telephone3.replace(/[^\d]/g, "")
+                                        .replace(/^628|^\+628/, "08") || "-";
+                                        var customerName = customerData?.name?.toUpperCase() || "";
+
+                                        // Fetch contact person name
+                                        return fetch(`https://tunastoyota.crm5.dynamics.com/api/data/v9.0/contacts(${contactPersonId})`)
+                                            .then(response => response.json())
+                                            .then(contactData => {
+                                            var contactPerson = contactData?.fullname?.toUpperCase() || "";
+
+                                            // Format ContactPersonPhone
+                                            contactPersonPhone = contactPersonPhone
+                                                .replace(/[^\d]/g, "")
+                                                .replace(/^628|^\+628/, "08");
+
+
+                                            return {
+                                                No: result.index,
+                                                PoliceRegNo: result.plate,
+                                                WorkOrder: workOrder,
+                                                TransactionDate: transactionDate,
+                                                CustomerName: customerName,
+                                                ContactPerson: `${contactPerson}/${customerName}`,
+                                                ContactPersonPhone: contactPersonPhone,
+                                                OwnerPhone: ownerPhone,
+                                                EquipmentNo: result.vin.toUpperCase(),
+                                                TypeKendaraan: result.TypeKendaraan,
+                                                TahunProduksi: result.TahunProduksi
+                                            };
+                                        });
+                                    });
+                                });
+                            });
+
+                            Promise.all(searchPromises).then(results => {
+                                var csvContent = "data:text/csv;charset=utf-8," +
+                                    "No,PoliceRegNo,PKBNo,TransactionDate,CustomerName,Contact Person,ContactPersonPhone,OwnerPhone,EquipmentNo,TypeKendaraan,TahunProduksi\n" +
+                                    results.map(result => `${result.No},${result.PoliceRegNo},${result.WorkOrder},${result.TransactionDate},${result.CustomerName},${result.ContactPerson},${result.ContactPersonPhone},${result.OwnerPhone},${result.EquipmentNo},${result.TypeKendaraan},${result.TahunProduksi}`).join("\n");
+
+                                var encodedUri = encodeURI(csvContent);
+                                var link = document.createElement("a");
+                                link.setAttribute("href", encodedUri);
+                                link.setAttribute("download", Date().toISOString()+".csv");
+                                document.body.appendChild(link);
+                                link.click();
+                            });
+                        }
+                    });
+                }
+            }
+        })();
+
+    });
+
+    // Event listeners for listview buttons
+    document.getElementById('find-police-number').addEventListener('click', function() {
+        (function() {
+            'use strict';
+
+            // Prompt user for input
+            var userInput = prompt("Masukkan nomor rangka yang ingin Anda cari, dipisahkan oleh koma:");
+
+            if (userInput) {
+                var inputs = userInput.split(",").map(function(item) {
+                    return item.trim();
+                }).filter(function(item) {
+                    return item !== "";
+                });
+
+                if (inputs.length > 0) {
+                    var promises = inputs.map(function(input) {
+                        return fetch('https://tunastoyota.crm5.dynamics.com/api/data/v9.0/xts_vehicleinformations?fetchXml=' + encodeURIComponent('<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false" returntotalrecordcount="true" page="1" count="50" no-lock="false"><entity name="xts_vehicleinformation"><attribute name="xts_platenumber"/><filter type="or" isquickfindfields="1"><condition attribute="xts_vehicleidentificationnumber" operator="like" value="' + input + '%"/></filter></entity></fetch>')).then(function(response) {
+                            return response.json();
+                        }).then(function(data) {
+                            if (data && data.value && data.value.length > 0) {
+                                return input + " : " + data.value[0].xts_platenumber;
+                            } else {
+                                return "Data tidak ditemukan untuk input: " + input;
+                            }
+                        }).catch(function(error) {
+                            return 'Terjadi kesalahan untuk input: ' + input + ', Error: ' + error.message;
+                        });
+                    });
+
+                    Promise.all(promises).then(function(results) {
+                        var newWindow = window.open("", "newWindow", "width=300,height=200");
+                        newWindow.document.write('<html><head><title>Magenta Project</title></head><body>');
+                        results.forEach(function(result) {
+                            newWindow.document.write('<p>' + result + '</p>');
+                        });
+                        newWindow.document.write('</body></html>');
+                        newWindow.document.close();
+                    }).catch(function(err) {
+                        var newWindow = window.open();
+                        newWindow.document.write('<html><head><title>Error</title></head><body>');
+                        newWindow.document.write('<h1>Terjadi kesalahan dalam menyelesaikan permintaan</h1>');
+                        newWindow.document.write('<p>' + err.message + '</p>');
+                        newWindow.document.write('</body></html>');
+                        newWindow.document.close();
+                    });
+
+                } else {
+                    alert("Input tidak valid atau tidak ada nilai yang dimasukkan.");
+                }
+            } else {
+                alert("Input tidak valid atau dibatalkan.");
+            }
+        })();
+
+    });
+
+    document.getElementById('find-phone-number').addEventListener('click', function() {
+        (function() {
+            'use strict';
+
+            // Prompt user for input
+            var userInput = prompt("Pencarian nomor telepon perusahaan atau owner, gunakan nomor rangka:");
+
+            if (userInput) {
+                var inputs = userInput.split(",").map(function(item) {
+                    return item.trim();
+                }).filter(function(item) {
+                    return item !== "";
+                });
+
+                if (inputs.length > 0) {
+                    var promises = inputs.map(function(input) {
+                        // Request pertama, mengambil _xts_customerid_value
+                        var fetchUrl = 'https://tunastoyota.crm5.dynamics.com/api/data/v9.0/xts_vehicleinformations?fetchXml=' + encodeURIComponent(
+                            `<fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false" returntotalrecordcount="true" page="1" count="50" no-lock="false">
+                        <entity name="xts_vehicleinformation">
+                            <attribute name="statecode"/>
+                            <attribute name="xts_vehicleidentificationnumber"/>
+                            <attribute name="xts_platenumber"/>
+                            <attribute name="xts_customerid"/>
+                            <attribute name="xts_businessunitid"/>
+                            <filter type="and">
+                                <condition attribute="statecode" operator="eq" value="0"/>
+                            </filter>
+                            <attribute name="xts_manufacturerid"/>
+                            <attribute name="xts_vehicleinformationid"/>
+                            <attribute name="xts_productionyear"/>
+                            <attribute name="xts_productdescription"/>
+                            <attribute name="xts_productid"/>
+                            <order attribute="xts_businessunitid" descending="false"/>
+                            <order attribute="xts_vehicleidentificationnumber" descending="false"/>
+                            <filter type="or" isquickfindfields="1">
+                                <condition attribute="xts_vehicleidentificationnumber" operator="like" value="${input}%"/>
+                                <condition attribute="xts_productionyear" operator="like" value="${input}%"/>
+                                <condition attribute="xts_productdescription" operator="like" value="${input}%"/>
+                                <condition attribute="xts_productidname" operator="like" value="${input}%"/>
+                                <condition attribute="xts_platenumber" operator="like" value="${input}%"/>
+                                <condition attribute="xts_manufactureridname" operator="like" value="${input}%"/>
+                                <condition attribute="xto_genericnumber" operator="like" value="${input}%"/>
+                                <condition attribute="xts_customeridname" operator="like" value="${input}%"/>
+                                <condition attribute="xts_businessunitidname" operator="like" value="${input}%"/>
+                            </filter>
+                        </entity>
+                    </fetch>`
+                );
+
+                        return fetch(fetchUrl)
+                            .then(function(response) {
+                            return response.json();
+                        })
+                            .then(function(data) {
+                            if (data && data.value && data.value.length > 0) {
+                                // Ambil _xts_customerid_value dari request pertama
+                                var customerId = data.value[0]._xts_customerid_value;
+
+                                // Request kedua menggunakan customerId dari request pertama
+                                var fetchUrl2 = 'https://tunastoyota.crm5.dynamics.com/api/data/v9.0/accounts(' + customerId + ')';
+                                return fetch(fetchUrl2)
+                                    .then(function(response) {
+                                    return response.json();
+                                })
+                                    .then(function(accountData) {
+                                    // Cek dan ambil telephone3
+                                    if (accountData && accountData.telephone3) {
+                                        return input + " : " + accountData.telephone3;
+                                    } else {
+                                        return "Data telephone3 tidak ditemukan untuk customerId: " + customerId;
+                                    }
+                                });
+                            } else {
+                                return "Data tidak ditemukan untuk input: " + input;
+                            }
+                        })
+                            .catch(function(error) {
+                            return 'Terjadi kesalahan untuk input: ' + input + ', Error: ' + error.message;
+                        });
+                    });
+
+                    // Menampilkan hasil akhir
+                    Promise.all(promises).then(function(results) {
+                        var newWindow = window.open("", "newWindow", "width=300,height=200");
+                        newWindow.document.write('<html><head><title>Magenta Project</title></head><body>');
+                        results.forEach(function(result) {
+                            newWindow.document.write('<p>' + result + '</p>');
+                        });
+                        newWindow.document.write('</body></html>');
+                        newWindow.document.close();
+                    }).catch(function(err) {
+                        var newWindow = window.open();
+                        newWindow.document.write('<html><head><title>Error</title></head><body>');
+                        newWindow.document.write('<h1>Terjadi kesalahan dalam menyelesaikan permintaan</h1>');
+                        newWindow.document.write('<p>' + err.message + '</p>');
+                        newWindow.document.write('</body></html>');
+                        newWindow.document.close();
+                    });
+
+                } else {
+                    alert("Input tidak valid atau tidak ada nilai yang dimasukkan.");
+                }
+            } else {
+                alert("Input tidak valid atau dibatalkan.");
+            }
+        })();
+
+    });
+
+    document.getElementById('convert-newline-comma').addEventListener('click', function() {
+        (function() {
+            'use strict';
+
+            // Function to create and show the textfield popup
+            function showTextFieldPopup() {
+                const popup = window.open('', '', 'width=400,height=300');
+                if (!popup) {
+                    alert('Popup blocked! Please allow popups for this website.');
+                    return;
+                }
+
+                popup.document.write(`
+            <html>
+            <head>
+                <title>Change Text</title>
+                <style>
+                    body {
+                        font-family: Arial, sans-serif;
+                        margin: 20px;
+                    }
+                    textarea {
+                        width: 100%;
+                        height: 150px;
+                        margin-bottom: 10px;
+                    }
+                    button {
+                        width: 100%;
+                        padding: 10px;
+                        background-color: #007bff;
+                        color: white;
+                        border: none;
+                        cursor: pointer;
+                    }
+                    button:hover {
+                        background-color: #0056b3;
+                    }
+                </style>
+            </head>
+            <body>
+                <textarea id="textField" placeholder="Enter text here (use commas to separate)"></textarea>
+                <button id="submitButton">Change Text</button>
+                <script>
+                    document.getElementById('submitButton').addEventListener('click', function() {
+                        const newText = document.getElementById('textField').value.replace(/\\n/g, ', ');
+                        window.opener.postMessage(newText, '*');
+                        window.close();
+                    });
+                </script>
+            </body>
+            </html>
+        `);
+            }
+
+            // Immediately show the popup when the script runs
+            showTextFieldPopup();
+
+            // Event listener to receive the new text and change the iframe content
+            window.addEventListener('message', function(event) {
+                if (typeof event.data === 'string') {
+                    const popup = window.open('', 'resultWindow', 'width=400,height=300');
+
+                    if (popup) {
+                        // Write the result text into the body of the new popup page
+                        popup.document.write('<html><head><title>Result</title></head><body>');
+                        popup.document.write(`<p>${event.data}</p>`);
+                        popup.document.write('</body></html>');
+                        popup.document.close(); // Close the document stream to ensure all data is written
+                    } else {
+                        alert('Failed to open popup window.');
+                    }
+                }
+            });
+        })();
+
+    });
+})();
