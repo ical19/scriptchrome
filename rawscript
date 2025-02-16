@@ -42,7 +42,7 @@
     titleText.style.textOverflow = 'ellipsis';
     titleText.style.whiteSpace = 'nowrap';
     titleText.style.marginRight = '10px';
-    titleText.innerText = 'Magenta Project v 2.0';
+    titleText.innerText = 'Magenta Project v 2.1';
 
     const windowControls = document.createElement('div');
     windowControls.style.display = 'flex';
