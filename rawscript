@@ -513,42 +513,53 @@
                                     var contactPersonId = data.value?.[0]?._xts_contactpersonid_value || "";
                                     var contactPersonPhone = data.value?.[0]?.xts_contactpersonphone || "";
 
-                                    // Fetch customer name
-                                    return fetch(`https://tunastoyota.crm5.dynamics.com/api/data/v9.0/accounts(${customerId})`)
-                                        .then(response => response.json())
-                                        .then(customerData => {
-                                        var ownerPhone = customerData?.telephone3.replace(/[^\d]/g, "")
-                                        .replace(/^628|^\+628/, "08") || "-";
-                                        var customerName = customerData?.name?.toUpperCase() || "";
+                                    // Format ContactPersonPhone jika ada
+                                    if (contactPersonPhone) {
+                                        contactPersonPhone = contactPersonPhone.replace(/[^\d]/g, "").replace(/^628|^\+628/, "08");
+                                    } else {
+                                        contactPersonPhone = "-";
+                                    }
 
-                                        // Fetch contact person name
-                                        return fetch(`https://tunastoyota.crm5.dynamics.com/api/data/v9.0/contacts(${contactPersonId})`)
-                                            .then(response => response.json())
-                                            .then(contactData => {
-                                            var contactPerson = contactData?.fullname?.toUpperCase() || "";
+                                    // Fetch customer name jika customerId tersedia
+                                    let customerPromise = customerId
+                                    ? fetch(`https://tunastoyota.crm5.dynamics.com/api/data/v9.0/accounts(${customerId})`)
+                                    .then(response => response.json())
+                                    .then(customerData => ({
+                                        customerName: customerData?.name?.toUpperCase() || "",
+                                        ownerPhone: customerData?.telephone3
+                                        ? customerData.telephone3.replace(/[^\d]/g, "").replace(/^628|^\+628/, "08")
+                                        : "-"
+                                    }))
+                                    .catch(() => ({ customerName: "", ownerPhone: "-" }))
+                                    : Promise.resolve({ customerName: "", ownerPhone: "-" });
 
-                                            // Format ContactPersonPhone
-                                            contactPersonPhone = contactPersonPhone
-                                                .replace(/[^\d]/g, "")
-                                                .replace(/^628|^\+628/, "08");
+                                    // Fetch contact person name jika contactPersonId tersedia
+                                    let contactPromise = contactPersonId
+                                    ? fetch(`https://tunastoyota.crm5.dynamics.com/api/data/v9.0/contacts(${contactPersonId})`)
+                                    .then(response => response.json())
+                                    .then(contactData => ({ contactPerson: contactData?.fullname?.toUpperCase() || "" }))
+                                    .catch(() => ({ contactPerson: "" }))
+                                    : Promise.resolve({ contactPerson: "" });
 
-
-                                            return {
-                                                No: result.index,
-                                                PoliceRegNo: result.plate,
-                                                WorkOrder: workOrder,
-                                                TransactionDate: transactionDate,
-                                                CustomerName: customerName,
-                                                ContactPerson: `${contactPerson}/${customerName}`,
-                                                ContactPersonPhone: contactPersonPhone,
-                                                OwnerPhone: ownerPhone,
-                                                EquipmentNo: result.vin.toUpperCase(),
-                                                TypeKendaraan: result.TypeKendaraan,
-                                                TahunProduksi: result.TahunProduksi
-                                            };
-                                        });
-                                    });
+                                    return Promise.all([customerPromise, contactPromise]).then(([customerResult, contactResult]) => {
+                                        return {
+                                            No: result.index,
+                                            PoliceRegNo: result.plate,
+                                            WorkOrder: workOrder,
+                                            TransactionDate: transactionDate,
+                                            CustomerName: customerResult.customerName,
+                                            ContactPerson: contactResult.contactPerson
+                                            ? `${contactResult.contactPerson}/${customerResult.customerName}`
+                    : customerResult.customerName,
+                ContactPersonPhone: contactPersonPhone,
+                OwnerPhone: customerResult.ownerPhone,
+                EquipmentNo: result.vin.toUpperCase(),
+                TypeKendaraan: result.TypeKendaraan,
+                TahunProduksi: result.TahunProduksi
+            };
+        });
                                 });
+
                             });
 
                             Promise.all(searchPromises).then(results => {
