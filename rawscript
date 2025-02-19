@@ -507,11 +507,11 @@
                                 return fetch(fetchUrl)
                                     .then(response => response.json())
                                     .then(data => {
-                                    var workOrder = data.value?.[0]?.xts_workorder || "";
-                                    var transactionDate = data.value?.[0]?.xts_transactiondate?.substring(0, 10) || "";
-                                    var customerId = data.value?.[0]?._xts_customerid_value || "";
-                                    var contactPersonId = data.value?.[0]?._xts_contactpersonid_value || "";
-                                    var contactPersonPhone = data.value?.[0]?.xts_contactpersonphone || "";
+                                    var workOrder = data.value?.[0]?.xts_workorder || "-";
+                                    var transactionDate = data.value?.[0]?.xts_transactiondate?.substring(0, 10) || "-";
+                                    var customerId = data.value?.[0]?._xts_customerid_value || "-";
+                                    var contactPersonId = data.value?.[0]?._xts_contactpersonid_value || "-";
+                                    var contactPersonPhone = data.value?.[0]?.xts_contactpersonphone || "-";
 
                                     // Format ContactPersonPhone jika ada
                                     if (contactPersonPhone) {
@@ -525,7 +525,7 @@
                                     ? fetch(`https://tunastoyota.crm5.dynamics.com/api/data/v9.0/accounts(${customerId})`)
                                     .then(response => response.json())
                                     .then(customerData => ({
-                                        customerName: customerData?.name?.toUpperCase() || "",
+                                        customerName: customerData?.name?.toUpperCase() || "-",
                                         ownerPhone: customerData?.telephone3
                                         ? customerData.telephone3.replace(/[^\d]/g, "").replace(/^628|^\+628/, "08")
                                         : "-"
@@ -564,8 +564,8 @@
 
                             Promise.all(searchPromises).then(results => {
                                 var csvContent = "data:text/csv;charset=utf-8," +
-                                    "No,PoliceRegNo,PKBNo,TransactionDate,CustomerName,Contact Person,ContactPersonPhone,OwnerPhone,EquipmentNo,TypeKendaraan,TahunProduksi\n" +
-                                    results.map(result => `${result.No},${result.PoliceRegNo},${result.WorkOrder},${result.TransactionDate},${result.CustomerName},${result.ContactPerson},${result.ContactPersonPhone},${result.OwnerPhone},${result.EquipmentNo},${result.TypeKendaraan},${result.TahunProduksi}`).join("\n");
+                                    "NoRangka,No,PoliceRegNo,PKBNo,TransactionDate,CustomerName,Contact Person,ContactPersonPhone,OwnerPhone,EquipmentNo,TypeKendaraan,TahunProduksi\n" +
+                                    results.map(result => `${result.EquipmentNo},${result.No},${result.PoliceRegNo},${result.WorkOrder},${result.TransactionDate},${result.CustomerName},${result.ContactPerson},${result.ContactPersonPhone},${result.OwnerPhone},${result.EquipmentNo},${result.TypeKendaraan},${result.TahunProduksi}`).join("\n");
 
                                 var encodedUri = encodeURI(csvContent);
                                 var link = document.createElement("a");
