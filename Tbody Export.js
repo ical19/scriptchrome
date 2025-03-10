@@ -1,13 +1,3 @@
-// ==UserScript==
-// @name         Export TBody to Excel
-// @namespace    http://tampermonkey.net/
-// @version      2.2
-// @description  Export the 33rd table's tbody content to an Excel file when \ or ' key is pressed, handling AJAX-loaded tables
-// @author       Magenta Project
-// @match        https://tunastoyota.crm5.dynamics.com/crmreports/*
-// @grant        none
-// ==/UserScript==
-
 (function() {
     'use strict';
 
