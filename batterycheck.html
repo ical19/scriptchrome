@@ -183,7 +183,7 @@
     body: JSON.stringify(payload),
     headers: {
       "Content-Type": "application/json"
-    }
+    },mode: "no-cors"
   })
   .then(res => res.json())
   .then(data => {
