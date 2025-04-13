@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Pengecekan Mobil</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background: #e0e0e0;
+    }
+
+    .neumorphic {
+      background: #e0e0e0;
+      border-radius: 30px;
+      box-shadow: 8px 8px 16px #bebebe,
+                  -8px -8px 16px #ffffff;
+    }
+
+    .neumorphic-inset {
+      background: #e0e0e0;
+      border-radius: 30px;
+      box-shadow: inset 6px 6px 10px #bebebe,
+                  inset -6px -6px 10px #ffffff;
+    }
+
+    .slide-in {
+      animation: slideIn 0.3s forwards;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(-100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    .modal {
+      backdrop-filter: blur(6px);
+      background-color: rgba(255, 255, 255, 0.6);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between">
+
+  <!-- GRID -->
+  <div class="p-4 space-y-4">
+    <!-- Plat Nomor -->
+    <div class="neumorphic p-3">
+      <input id="plat-nomor" type="text" placeholder="Masukkan Plat Nomor" class="w-full rounded-full p-3 outline-none neumorphic-inset">
+    </div>
+
+    <!-- Accu -->
+    <div id="accu" class="h-40 neumorphic flex items-center justify-center text-xl font-bold cursor-pointer relative">
+      Accu
+    </div>
+
+    <!-- Ban Depan -->
+    <div class="grid grid-cols-2 gap-4">
+      <div id="ban-depan-kiri" class="h-24 neumorphic flex items-center justify-center font-bold cursor-pointer">
+        Ban Depan Kiri
+      </div>
+      <div id="ban-depan-kanan" class="h-24 neumorphic flex items-center justify-center font-bold cursor-pointer">
+        Ban Depan Kanan
+      </div>
+    </div>
+
+    <!-- Ban Belakang -->
+    <div class="grid grid-cols-2 gap-4">
+      <div id="ban-belakang-kiri" class="h-24 neumorphic flex items-center justify-center font-bold cursor-pointer">
+        Ban Belakang Kiri
+      </div>
+      <div id="ban-belakang-kanan" class="h-24 neumorphic flex items-center justify-center font-bold cursor-pointer">
+        Ban Belakang Kanan
+      </div>
+    </div>
+  </div>
+
+  <!-- Popup ACCU Modal -->
+  <div id="accu-modal" class="fixed inset-0 hidden items-center justify-center modal z-50">
+    <div class="neumorphic-inset p-6 rounded-3xl text-center space-y-4">
+      <div class="text-lg font-semibold">Pilih Status Accu</div>
+      <div onclick="selectAccu('Good')" class="cursor-pointer p-2 rounded-full bg-green-300">Good</div>
+      <div onclick="selectAccu('Good Recharge')" class="cursor-pointer p-2 rounded-full bg-yellow-300">Good Recharge</div>
+      <div onclick="selectAccu('Replace')" class="cursor-pointer p-2 rounded-full bg-red-300">Replace</div>
+      <div onclick="closeModal()" class="text-sm mt-2 underline cursor-pointer">Tutup</div>
+    </div>
+  </div>
+
+  <!-- FORM INPUT BAWAH -->
+  <div id="input-form" class="hidden fixed bottom-0 left-0 right-0 neumorphic-inset p-4 z-40">
+    <input id="input-field" type="number" placeholder="Masukkan tahun ban dipasang (YYYY)" class="p-3 w-full mb-2 rounded-full neumorphic-inset outline-none" />
+    <button onclick="saveInput()" class="p-3 w-full rounded-full text-black font-semibold neumorphic">Simpan</button>
+  </div>
+
+  <!-- FAB Submit -->
+  <button id="submit-btn" onclick="resetAll()" class="fixed bottom-20 right-5 w-16 h-16 rounded-full neumorphic text-2xl">
+    ✅
+  </button>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      let selectedBox = null;
+
+      function platValid() {
+        const plat = document.getElementById("plat-nomor").value;
+        return plat.trim().length > 0;
+      }
+
+      const boxes = ["ban-depan-kiri", "ban-depan-kanan", "ban-belakang-kiri", "ban-belakang-kanan"];
+      boxes.forEach(id => {
+        const box = document.getElementById(id);
+        box.addEventListener("click", () => {
+          if (!platValid()) {
+            alert("Isi plat nomor terlebih dahulu!");
+            return;
+          }
+          selectedBox = box;
+          const inputForm = document.getElementById("input-form");
+          inputForm.classList.remove("hidden");
+          inputForm.classList.add("slide-in");
+          document.getElementById("submit-btn").classList.add("hidden");
+          document.getElementById("input-field").value = "";
+        });
+      });
+
+      const accuEl = document.getElementById("accu");
+      accuEl.addEventListener("click", () => {
+        if (!platValid()) {
+          alert("Isi plat nomor terlebih dahulu!");
+          return;
+        }
+        document.getElementById("accu-modal").classList.remove("hidden");
+      });
+
+      window.selectAccu = function (status) {
+        const accu = document.getElementById("accu");
+        accu.innerHTML = status;
+        accu.style.backgroundColor = status === "Good" ? '#a7f3d0' : (status === "Good Recharge" ? '#fde68a' : '#fca5a5');
+        closeModal();
+      }
+
+      window.closeModal = function () {
+        document.getElementById("accu-modal").classList.add("hidden");
+      }
+
+      window.saveInput = function () {
+        const input = document.getElementById("input-field").value;
+        if (selectedBox && input) {
+          const year = parseInt(input);
+          const currentYear = new Date().getFullYear();
+          const age = currentYear - year;
+          const isGood = age < 4;
+          selectedBox.innerHTML = isGood ? `Bagus (${year})` : `Perlu Ganti (${year})`;
+          selectedBox.style.backgroundColor = isGood ? '#a7f3d0' : '#fca5a5';
+          document.getElementById("input-form").classList.add("hidden");
+          document.getElementById("submit-btn").classList.remove("hidden");
+        }
+      }
+
+      window.resetAll = function () {
+        document.getElementById("plat-nomor").value = "";
+
+        const accu = document.getElementById("accu");
+        accu.innerHTML = 'Accu';
+        accu.style.backgroundColor = '#e0e0e0';
+
+        boxes.forEach(id => {
+          const box = document.getElementById(id);
+          box.innerHTML = id.replace(/-/g, ' ');
+          box.style.backgroundColor = '#e0e0e0';
+        });
+      }
+    });
+  </script>
+
+</body>
+</html>
