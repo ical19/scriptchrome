@@ -199,7 +199,7 @@
 };
     
 window.resetAll = function () {
-  getAccuColor("kosong");
+  accuEl.style.backgroundColor = getAccuColor("kosong");
   document.getElementById("plat-nomor").value = "";
   document.getElementById("accu").innerText = "Accu";
 
@@ -276,7 +276,7 @@ window.resetAll = function () {
         const yearText = `Tahun (${year})`;
         const currentYear = new Date().getFullYear();
         const age = currentYear - parseInt(year);
-        const isGood = age < 4;
+        const isGood = age < 6;
         box.innerHTML = isGood ? `Bagus (${year})` : `Perlu Ganti (${year})`;
         box.style.backgroundColor = isGood ? '#a7f3d0' : '#fca5a5';
       });
@@ -291,7 +291,7 @@ window.resetAll = function () {
         const year = parseInt(input);
         const currentYear = new Date().getFullYear();
         const age = currentYear - year;
-        const isGood = age < 4;
+        const isGood = age < 6;
         selectedBox.innerHTML = isGood ? `Bagus (${year})` : `Perlu Ganti (${year})`;
         selectedBox.style.backgroundColor = isGood ? '#a7f3d0' : '#fca5a5';
         document.getElementById("input-form").classList.add("hidden");
@@ -342,6 +342,9 @@ function getAccuColor(status) {
     });
   });
 </script>
+<div class="fixed bottom-2 left-4 text-sm text-gray-500 select-none">
+  <span class="italic">kaizenMan 2025</span>
+</div>
 
 </body>
 </html>
