@@ -106,7 +106,14 @@
   <div id="input-form" class="hidden fixed bottom-0 left-0 right-0 neumorphic-inset p-4 z-40">
     <form onsubmit="handleFormSubmit(event)">
       <input id="input-field" type="number" inputmode="numeric" placeholder="Masukkan tahun ban dipasang (YYYY)" class="p-3 w-full mb-2 rounded-full outline-none neumorphic-inset border-none" />
-      <button type="submit" class="p-3 w-full rounded-full text-black font-semibold neumorphic">Simpan</button>
+      <div class="flex gap-2">
+        <button type="submit" class="p-3 w-full rounded-full text-black font-semibold neumorphic">
+          Simpan
+        </button>
+        <button type="button" onclick="handleAllClick()" class="p-3 w-full rounded-full text-white font-semibold neumorphic bg-blue-500 hover:bg-blue-600">
+          All
+        </button>
+      </div>
     </form>
   </div>
 
@@ -174,9 +181,11 @@
         fetch("https://script.google.com/macros/s/AKfycbxTo5LwllmMtvhC3l5mgA-eGWBaqS5DF21rtDla8nFDBeaiknJ4KYG5ZsdQG8SAn_b6Xg/exec", {
           method: "POST",
           body: JSON.stringify(payload),
-          headers: {
-            "Content-Type": "application/json"
-          }
+          headers: { 
+    "Content-Type": "application/json",
+    "Origin": window.location.origin // Tambahkan header Origin
+  },
+  mode: "no-cors"
         }).then(res => res.text())
           .then(data => {
             alert("✅ Data berhasil dikirim ke spreadsheet!");
@@ -217,20 +226,45 @@
         document.getElementById("accu-modal").classList.remove("hidden");
       });
 
-      window.selectAccu = function (status) {
-        const accu = document.getElementById("accu");
-        accu.innerHTML = status;
-        let color = '#e0e0e0';
-        if (status.includes("Good")) color = '#a7f3d0';
-        else if (status.includes("Charge") || status.includes("Recharge")) color = '#fde68a';
-        else if (status.includes("Replace") || status.includes("Bad")) color = '#fca5a5';
-        accu.style.backgroundColor = color;
+      function closeModal() {
+        document.getElementById("accu-modal").classList.add("hidden");
+      }
+
+      function selectAccu(status) {
+        accuEl.innerText = status;
         closeModal();
       }
 
-      window.closeModal = function () {
-        document.getElementById("accu-modal").classList.add("hidden");
-      }
+      window.handleAllClick = function () {
+        const year = document.getElementById("input-field").value;
+
+        if (!year) {
+          alert("Masukkan tahun ban terlebih dahulu!");
+          return;
+        }
+
+        const boxes = [
+          "ban-depan-kiri",
+          "ban-depan-kanan",
+          "ban-belakang-kiri",
+          "ban-belakang-kanan"
+        ];
+
+        boxes.forEach(id => {
+          const box = document.getElementById(id);
+          const yearText = `Tahun (${year})`;
+          box.innerHTML = yearText;
+
+          // Set background color based on year
+          const currentYear = new Date().getFullYear();
+          const age = currentYear - parseInt(year);
+          const isGood = age < 4;
+          box.style.backgroundColor = isGood ? '#a7f3d0' : '#fca5a5';
+        });
+
+        document.getElementById("input-form").classList.add("hidden");
+        document.getElementById("submit-btn").classList.remove("hidden");
+      };
 
       window.saveInput = function () {
         const input = document.getElementById("input-field").value;
@@ -250,20 +284,7 @@
         event.preventDefault();
         saveInput();
       }
-
-      window.resetAll = function () {
-        document.getElementById("plat-nomor").value = "";
-        const accu = document.getElementById("accu");
-        accu.innerHTML = 'Accu';
-        accu.style.backgroundColor = '#e0e0e0';
-        boxes.forEach(id => {
-          const box = document.getElementById(id);
-          box.innerHTML = id.replace(/-/g, ' ');
-          box.style.backgroundColor = '#e0e0e0';
-        });
-      }
     });
   </script>
-
 </body>
 </html>
