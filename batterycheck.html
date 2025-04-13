@@ -181,9 +181,11 @@
       fetch("https://script.google.com/macros/s/AKfycbxTo5LwllmMtvhC3l5mgA-eGWBaqS5DF21rtDla8nFDBeaiknJ4KYG5ZsdQG8SAn_b6Xg/exec", {
         method: "POST",
         body: JSON.stringify(payload),
-        headers: {
-          "Content-Type": "application/json"
-        }
+       headers: { 
+    "Content-Type": "application/json",
+    "Origin": window.location.origin // Tambahkan header Origin
+  },
+  mode: "no-cors"
       }).then(res => res.text())
         .then(data => {
           alert("✅ Data berhasil dikirim ke spreadsheet!");
