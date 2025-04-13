@@ -166,16 +166,22 @@
       return valid;
     }
 
+    function extractYear(text) {
+  const match = text.match(/\d{4}/);
+  return match ? match[0] : "-";
+}
+
+
     window.submitToSpreadsheet = function () {
   if (!validateFields()) return;
 
-  const payload = {
+    const payload = {
     plat: document.getElementById("plat-nomor").value,
     accu: document.getElementById("accu").innerText,
-    banDepanKiri: document.getElementById("ban-depan-kiri").innerText,
-    banDepanKanan: document.getElementById("ban-depan-kanan").innerText,
-    banBelakangKiri: document.getElementById("ban-belakang-kiri").innerText,
-    banBelakangKanan: document.getElementById("ban-belakang-kanan").innerText
+    banDepanKiri: extractYear(document.getElementById("ban-depan-kiri").innerText),
+    banDepanKanan: extractYear(document.getElementById("ban-depan-kanan").innerText),
+    banBelakangKiri: extractYear(document.getElementById("ban-belakang-kiri").innerText),
+    banBelakangKanan: extractYear(document.getElementById("ban-belakang-kanan").innerText)
   };
 
   fetch("https://script.google.com/macros/s/AKfycbxTo5LwllmMtvhC3l5mgA-eGWBaqS5DF21rtDla8nFDBeaiknJ4KYG5ZsdQG8SAn_b6Xg/exec", {
