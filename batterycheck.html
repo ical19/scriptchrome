@@ -185,19 +185,11 @@
       "Content-Type": "application/json"
     },mode: "no-cors"
   })
-  .then(res => res.json())
-  .then(data => {
-    if (data.status === "success") {
-      alert("✅ Data berhasil dikirim ke spreadsheet!");
-      resetAll();
-    } else {
-      alert("❌ Gagal: " + data.message);
-    }
-  })
-  .catch(err => {
-    alert("❌ Error: " + err.message);
-    console.error(err);
-  });
+  .then(res => res.text())
+        .then(data => {
+          alert("✅ Data berhasil dikirim ke spreadsheet!");
+          resetAll();
+        });
 };
     
 window.resetAll = function () {
