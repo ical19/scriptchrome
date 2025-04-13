@@ -283,6 +283,35 @@
       saveInput();
     }
 
+    window.selectAccu = function (status) {
+  const accuEl = document.getElementById("accu");
+
+  accuEl.innerText = status;
+  accuEl.style.backgroundColor = getAccuColor(status);
+  accuEl.style.borderRadius = "1rem";
+  accuEl.style.padding = "1rem";
+
+  closeModal();
+};
+
+function getAccuColor(status) {
+  switch (status) {
+    case "Good Battery":
+      return "#a7f3d0"; // hijau muda
+    case "Good Recharge":
+      return "#fde68a"; // kuning terang
+    case "Charge and Retest":
+      return "#fef9c3"; // kuning pucat
+    case "Replace Battery":
+      return "#fdba74"; // oranye
+    case "Bad Cell Replace":
+      return "#fca5a5"; // merah muda
+    default:
+      return "#e0e0e0"; // default abu2
+  }
+}
+
+
     document.addEventListener("click", function (event) {
       const inputForm = document.getElementById("input-form");
       if (!inputForm.classList.contains("hidden") && !inputForm.contains(event.target) && !event.target.closest(".neumorphic")) {
