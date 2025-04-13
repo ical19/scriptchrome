@@ -19,7 +19,6 @@
 
     .neumorphic-inset {
       background: #e0e0e0;
-      border-radius: 30px;
       box-shadow: inset 6px 6px 10px #bebebe,
                   inset -6px -6px 10px #ffffff;
     }
@@ -51,7 +50,7 @@
   <div class="p-4 space-y-4">
     <!-- Plat Nomor -->
     <div class="neumorphic p-3">
-      <input id="plat-nomor" type="text" placeholder="Masukkan Plat Nomor" class="w-full rounded-full p-3 outline-none neumorphic-inset uppercase">
+      <input id="plat-nomor" type="text" placeholder="Masukkan Plat Nomor" class="w-full rounded-full p-3 outline-none neumorphic-inset uppercase font-bold text-lg text-center tracking-widest">
     </div>
 
     <!-- Accu -->
@@ -81,13 +80,13 @@
   </div>
 
   <!-- Popup ACCU Modal -->
-  <div id="accu-modal" class="fixed inset-0 hidden items-center justify-center modal z-50 flex">
-    <div class="neumorphic-inset p-6 rounded-3xl text-center space-y-4 w-10/12 max-w-sm">
+  <div id="accu-modal" class="fixed inset-0 hidden items-center justify-center modal z-50">
+    <div class="neumorphic-inset p-6 rounded-3xl text-center space-y-4 max-w-xs w-full mx-auto">
       <div class="text-lg font-semibold">Pilih Status Accu</div>
       <div onclick="selectAccu('Good Battery')" class="cursor-pointer p-2 rounded-full bg-green-300">Good Battery</div>
       <div onclick="selectAccu('Good Recharge')" class="cursor-pointer p-2 rounded-full bg-yellow-300">Good Recharge</div>
       <div onclick="selectAccu('Charge and Retest')" class="cursor-pointer p-2 rounded-full bg-yellow-200">Charge and Retest</div>
-      <div onclick="selectAccu('Replace Battery')" class="cursor-pointer p-2 rounded-full bg-red-300">Replace Battery</div>
+      <div onclick="selectAccu('Replace Battery')" class="cursor-pointer p-2 rounded-full bg-orange-300">Replace Battery</div>
       <div onclick="selectAccu('Bad Cell Replace')" class="cursor-pointer p-2 rounded-full bg-red-400">Bad Cell Replace</div>
       <div onclick="closeModal()" class="text-sm mt-2 underline cursor-pointer">Tutup</div>
     </div>
@@ -95,8 +94,10 @@
 
   <!-- FORM INPUT BAWAH -->
   <div id="input-form" class="hidden fixed bottom-0 left-0 right-0 neumorphic-inset p-4 z-40">
-    <input id="input-field" type="number" placeholder="Masukkan tahun ban dipasang (YYYY)" class="p-3 w-full mb-2 rounded-full neumorphic-inset outline-none" />
-    <button onclick="saveInput()" class="p-3 w-full rounded-full text-black font-semibold neumorphic">Simpan</button>
+    <form onsubmit="handleFormSubmit(event)">
+      <input id="input-field" type="number" inputmode="numeric" placeholder="Masukkan tahun ban dipasang (YYYY)" class="p-3 w-full mb-2 rounded-full outline-none neumorphic-inset border-none" />
+      <button type="submit" class="p-3 w-full rounded-full text-black font-semibold neumorphic">Simpan</button>
+    </form>
   </div>
 
   <!-- FAB Submit -->
@@ -127,6 +128,10 @@
           inputForm.classList.add("slide-in");
           document.getElementById("submit-btn").classList.add("hidden");
           document.getElementById("input-field").value = "";
+          setTimeout(() => {
+            document.getElementById("input-field").scrollIntoView({ behavior: 'smooth', block: 'center' });
+            document.getElementById("input-field").focus();
+          }, 100);
         });
       });
 
@@ -142,11 +147,11 @@
       window.selectAccu = function (status) {
         const accu = document.getElementById("accu");
         accu.innerHTML = status;
-        let bg;
-        if (status.includes("Good")) bg = '#a7f3d0';
-        else if (status.includes("Charge")) bg = '#fde68a';
-        else bg = '#fca5a5';
-        accu.style.backgroundColor = bg;
+        let color = '#e0e0e0';
+        if (status.includes("Good")) color = '#a7f3d0';
+        else if (status.includes("Charge") || status.includes("Recharge")) color = '#fde68a';
+        else if (status.includes("Replace") || status.includes("Bad")) color = '#fca5a5';
+        accu.style.backgroundColor = color;
         closeModal();
       }
 
@@ -168,13 +173,16 @@
         }
       }
 
+      window.handleFormSubmit = function (event) {
+        event.preventDefault();
+        saveInput();
+      }
+
       window.resetAll = function () {
         document.getElementById("plat-nomor").value = "";
-
         const accu = document.getElementById("accu");
         accu.innerHTML = 'Accu';
         accu.style.backgroundColor = '#e0e0e0';
-
         boxes.forEach(id => {
           const box = document.getElementById(id);
           box.innerHTML = id.replace(/-/g, ' ');
