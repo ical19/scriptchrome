@@ -42,6 +42,16 @@
       backdrop-filter: blur(6px);
       background-color: rgba(255, 255, 255, 0.6);
     }
+
+    .blink {
+      animation: blink-animation 0.6s steps(2, start) 3;
+    }
+
+    @keyframes blink-animation {
+      to {
+        visibility: hidden;
+      }
+    }
   </style>
 </head>
 <body class="min-h-screen flex flex-col justify-between">
@@ -50,7 +60,7 @@
   <div class="p-4 space-y-4">
     <!-- Plat Nomor -->
     <div class="neumorphic p-3">
-      <input id="plat-nomor" type="text" placeholder="Masukkan Plat Nomor" class="w-full rounded-full p-3 outline-none neumorphic-inset uppercase font-bold text-lg text-center tracking-widest">
+      <input id="plat-nomor" type="text" placeholder="Masukkan Plat Nomor" class="w-full rounded-full p-3 outline-none neumorphic-inset uppercase font-bold text-2xl text-center tracking-widest">
     </div>
 
     <!-- Accu -->
@@ -101,7 +111,7 @@
   </div>
 
   <!-- FAB Submit -->
-  <button id="submit-btn" onclick="resetAll()" class="fixed bottom-20 right-5 w-16 h-16 rounded-full neumorphic text-2xl">
+  <button id="submit-btn" onclick="submitToSpreadsheet()" class="fixed bottom-20 right-5 w-16 h-16 rounded-full neumorphic text-2xl">
     ✅
   </button>
 
@@ -110,8 +120,71 @@
       let selectedBox = null;
 
       function platValid() {
-        const plat = document.getElementById("plat-nomor").value;
-        return plat.trim().length > 0;
+        const plat = document.getElementById("plat-nomor").value.trim();
+        return plat.length > 0;
+      }
+
+      function validateFields() {
+        const plat = document.getElementById("plat-nomor");
+        const accu = document.getElementById("accu");
+        const boxes = [
+          document.getElementById("ban-depan-kiri"),
+          document.getElementById("ban-depan-kanan"),
+          document.getElementById("ban-belakang-kiri"),
+          document.getElementById("ban-belakang-kanan")
+        ];
+
+        let valid = true;
+
+        if (!platValid()) {
+          plat.classList.add("blink");
+          valid = false;
+        }
+        if (accu.innerText === 'Accu') {
+          accu.classList.add("blink");
+          valid = false;
+        }
+        boxes.forEach(box => {
+          if (box.innerText.includes("Ban")) {
+            box.classList.add("blink");
+            valid = false;
+          }
+        });
+        setTimeout(() => {
+          plat.classList.remove("blink");
+          accu.classList.remove("blink");
+          boxes.forEach(box => box.classList.remove("blink"));
+        }, 2000);
+
+        return valid;
+      }
+
+      window.submitToSpreadsheet = function () {
+        if (!validateFields()) return;
+
+        const payload = {
+          plat: document.getElementById("plat-nomor").value,
+          accu: document.getElementById("accu").innerText,
+          banDepanKiri: document.getElementById("ban-depan-kiri").innerText,
+          banDepanKanan: document.getElementById("ban-depan-kanan").innerText,
+          banBelakangKiri: document.getElementById("ban-belakang-kiri").innerText,
+          banBelakangKanan: document.getElementById("ban-belakang-kanan").innerText
+        };
+
+        fetch("https://script.google.com/macros/s/AKfycbxTo5LwllmMtvhC3l5mgA-eGWBaqS5DF21rtDla8nFDBeaiknJ4KYG5ZsdQG8SAn_b6Xg/exec", {
+          method: "POST",
+          body: JSON.stringify(payload),
+          headers: {
+            "Content-Type": "application/json"
+          }
+        }).then(res => res.text())
+          .then(data => {
+            alert("✅ Data berhasil dikirim ke spreadsheet!");
+            resetAll();
+          }).catch(err => {
+            alert("❌ Gagal mengirim data.");
+            console.error(err);
+          });
       }
 
       const boxes = ["ban-depan-kiri", "ban-depan-kanan", "ban-belakang-kiri", "ban-belakang-kanan"];
