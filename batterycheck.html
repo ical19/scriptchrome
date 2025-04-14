@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#e0e0e0">
 
   <meta charset="UTF-8">
-  <title>Pengecekan Mobil 1</title>
+  <title>Pengecekan Mobil</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -221,25 +221,28 @@
     banBelakangKanan: extractYear(document.getElementById("ban-belakang-kanan").innerText).replace(/\s+/g, '')
   };
 
-  fetch("https://script.google.com/macros/s/AKfycbxTo5LwllmMtvhC3l5mgA-eGWBaqS5DF21rtDla8nFDBeaiknJ4KYG5ZsdQG8SAn_b6Xg/exec", {
-    method: "POST",
-    body: JSON.stringify(payload),
-    headers: {
-      "Content-Type": "application/json"
-    },
-    mode: "no-cors"
-  })
-  .then(res => res.text())
-  .then(data => {
-    alert("✅ Data berhasil dikirim ke spreadsheet!");
-    resetAll();
-  })
-  .finally(() => {
-    // Sembunyikan loading dan aktifkan tombol kembali
-    submitBtn.disabled = false;
-    loadingOverlay.style.display = "none";
-    clearInterval(dotInterval);
-  });
+ fetch("https://script.google.com/macros/s/AKfycbxTo5LwllmMtvhC3l5mgA-eGWBaqS5DF21rtDla8nFDBeaiknJ4KYG5ZsdQG8SAn_b6Xg/exec", {
+  method: "POST",
+  body: JSON.stringify(payload),
+  headers: {
+    "Content-Type": "application/json"
+  },
+  mode: "no-cors"
+})
+.then(() => {
+  // Karena no-cors tidak bisa baca response, langsung anggap berhasil
+  alert("✅ Data berhasil dikirim ke spreadsheet!");
+  resetAll();
+})
+.catch((error) => {
+  console.error("Gagal mengirim data:", error);
+  alert("❌ Terjadi kesalahan saat mengirim data.");
+})
+.finally(() => {
+  submitBtn.disabled = false;
+  loadingOverlay.style.display = "none";
+  clearInterval(dotInterval);
+});
 };
 
     
