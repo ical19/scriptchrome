@@ -6,10 +6,19 @@
 <meta name="theme-color" content="#e0e0e0">
 
   <meta charset="UTF-8">
-  <title>Pengecekan Mobil x</title>
+  <title>Pengecekan Mobil Y</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
+
+    .neumorphic-shadow {
+  box-shadow: 8px 8px 16px #bebebe, -8px -8px 16px #ffffff;
+}
+
+.neumorphic-item {
+  box-shadow: inset 4px 4px 8px #bebebe, inset -4px -4px 8px #ffffff;
+}
+    
     @keyframes dot-flash {
   0% { opacity: 0; }
   25% { opacity: 1; }
@@ -108,17 +117,21 @@
   </div>
 
   <!-- Popup ACCU Modal -->
-  <div id="accu-modal" class="fixed inset-0 hidden items-center justify-center modal z-50">
-    <div class="neumorphic-inset p-6 rounded-3xl text-center space-y-4 max-w-xs w-full mx-auto">
-      <div class="text-lg font-semibold">Pilih Status Accu</div>
-      <div onclick="selectAccu('Good Battery')" class="cursor-pointer p-2 rounded-full bg-green-300">Good Battery</div>
-      <div onclick="selectAccu('Good Recharge')" class="cursor-pointer p-2 rounded-full bg-yellow-300">Good Recharge</div>
-      <div onclick="selectAccu('Charge and Retest')" class="cursor-pointer p-2 rounded-full bg-yellow-200">Charge and Retest</div>
-      <div onclick="selectAccu('Replace Battery')" class="cursor-pointer p-2 rounded-full bg-orange-300">Replace Battery</div>
-      <div onclick="selectAccu('Bad Cell Replace')" class="cursor-pointer p-2 rounded-full bg-red-400">Bad Cell Replace</div>
-      <div onclick="closeModal()" class="text-sm mt-2 underline cursor-pointer">Tutup</div>
-    </div>
+  <!-- Accu Modal -->
+<div id="accu-modal" class="fixed inset-0 hidden z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+  <div class="bg-[#e0e0e0] rounded-3xl p-6 max-w-sm w-full mx-4 neumorphic-shadow text-center space-y-4">
+    <div class="text-xl font-semibold text-gray-700">🔋 Pilih Status Accu</div>
+
+    <div onclick="selectAccu('Good Battery')" class="cursor-pointer p-3 rounded-xl neumorphic-item bg-green-100 hover:scale-105 transition">Good Battery</div>
+    <div onclick="selectAccu('Good Recharge')" class="cursor-pointer p-3 rounded-xl neumorphic-item bg-yellow-100 hover:scale-105 transition">Good Recharge</div>
+    <div onclick="selectAccu('Charge and Retest')" class="cursor-pointer p-3 rounded-xl neumorphic-item bg-yellow-50 hover:scale-105 transition">Charge and Retest</div>
+    <div onclick="selectAccu('Replace Battery')" class="cursor-pointer p-3 rounded-xl neumorphic-item bg-orange-100 hover:scale-105 transition">Replace Battery</div>
+    <div onclick="selectAccu('Bad Cell Replace')" class="cursor-pointer p-3 rounded-xl neumorphic-item bg-red-100 hover:scale-105 transition">Bad Cell Replace</div>
+
+    <div onclick="closeModal()" class="text-sm mt-2 text-blue-500 underline cursor-pointer">Tutup</div>
   </div>
+</div>
+
 
   <!-- FORM INPUT BAWAH -->
   <div id="input-form" class="hidden fixed bottom-0 left-0 right-0 neumorphic-inset p-4 z-40">
