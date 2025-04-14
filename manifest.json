@@ -1,18 +1,19 @@
 {
-  "name": "Cross selling TGB and Tire",
-  "short_name": "Battery checker",
-  "start_url": ".",
+  "name": "Battery Check",
+  "short_name": "BatteryCheck",
+  "start_url": "batterycheck.html",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#00ff00",
+  "background_color": "#e0e0e0",
+  "theme_color": "#e0e0e0",
+  "description": "Aplikasi pengecekan kondisi accu dan ban mobil",
   "icons": [
     {
-      "src": "android-chrome-192x192.png",
+      "src": "icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "android-chrome-512x512.png",
+      "src": "icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
     }
