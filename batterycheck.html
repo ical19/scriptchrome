@@ -3,10 +3,7 @@
 <head>
 
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#1976d2">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<link rel="icon" href="android-chrome-192x192.png">
+<meta name="theme-color" content="#e0e0e0">
 
   <meta charset="UTF-8">
   <title>Pengecekan Mobil</title>
@@ -348,6 +345,17 @@ function getAccuColor(status) {
       }
     });
   });
+
+   if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("service-worker.js").then(function (registration) {
+      console.log("ServiceWorker terdaftar:", registration.scope);
+    }).catch(function (error) {
+      console.log("Gagal mendaftarkan ServiceWorker:", error);
+    });
+  });
+}
+
 </script>
 <div class="fixed bottom-2 left-4 text-sm text-gray-500 select-none">
   <span class="italic">©kaizenMan 2025 (Tunas Toyota Batutulis)</span>
