@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#e0e0e0">
 
   <meta charset="UTF-8">
-  <title>Pengecekan Mobil Y</title>
+  <title>Pengecekan Battery dan Ban</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -135,18 +135,24 @@
 
   <!-- FORM INPUT BAWAH -->
   <div id="input-form" class="hidden fixed bottom-0 left-0 right-0 neumorphic-inset p-4 z-40">
-    <form onsubmit="handleFormSubmit(event)">
-      <input id="input-field" type="number" inputmode="numeric" placeholder="Masukkan tahun ban dipasang (YYYY)" class="p-3 w-full mb-2 rounded-full outline-none neumorphic-inset border-none" />
-      <div class="flex gap-2">
-        <button type="submit" class="p-3 w-full rounded-full text-black font-semibold neumorphic">
-          Simpan
-        </button>
-        <button type="button" onclick="handleAllClick()" class="p-3 w-full rounded-full text-white font-semibold neumorphic bg-blue-500 hover:bg-blue-600">
-          All
-        </button>
-      </div>
-    </form>
-  </div>
+  <form onsubmit="handleFormSubmit(event)" class="flex flex-col gap-2">
+    <!-- Baris input dan tombol -->
+    <div class="flex gap-2">
+      <input id="input-field" type="number" inputmode="numeric" placeholder="Masukkan tahun ban dipasang (YYYY)"
+        class="p-3 rounded-full outline-none neumorphic-inset border-none w-[60%]" />
+      
+      <button type="submit"
+        class="p-3 rounded-full text-black font-semibold neumorphic w-[25%]">
+        Simpan
+      </button>
+
+      <button type="button" onclick="handleAllClick()"
+        class="p-3 rounded-full text-white font-semibold neumorphic bg-blue-500 hover:bg-blue-600 w-[15%]">
+        All
+      </button>
+    </div>
+  </form>
+</div>
 
   <!-- FAB Submit -->
   <button id="submit-btn" onclick="submitToSpreadsheet()" class="fixed bottom-20 right-5 w-16 h-16 rounded-full neumorphic text-2xl">
