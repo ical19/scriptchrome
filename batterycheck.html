@@ -179,13 +179,27 @@
     window.submitToSpreadsheet = function () {
   if (!validateFields()) return;
 
-    const payload = {
-    plat: document.getElementById("plat-nomor").value,
-    accu: document.getElementById("accu").innerText,
-    banDepanKiri: extractYear(document.getElementById("ban-depan-kiri").innerText),
-    banDepanKanan: extractYear(document.getElementById("ban-depan-kanan").innerText),
-    banBelakangKiri: extractYear(document.getElementById("ban-belakang-kiri").innerText),
-    banBelakangKanan: extractYear(document.getElementById("ban-belakang-kanan").innerText)
+  const submitBtn = document.getElementById("submit-btn");
+  const loadingOverlay = document.getElementById("loading-overlay");
+  const dots = document.getElementById("dots");
+
+  // Nonaktifkan tombol + tampilkan loading
+  submitBtn.disabled = true;
+  loadingOverlay.style.display = "flex";
+
+  let dotCount = 1;
+  const dotInterval = setInterval(() => {
+    dotCount = (dotCount % 3) + 1;
+    dots.textContent = '.'.repeat(dotCount);
+  }, 500);
+
+  const payload = {
+    plat: document.getElementById("plat-nomor").value.replace(/\s+/g, ''),
+    accu: document.getElementById("accu").innerText, // accu tetap dengan spasi
+    banDepanKiri: extractYear(document.getElementById("ban-depan-kiri").innerText).replace(/\s+/g, ''),
+    banDepanKanan: extractYear(document.getElementById("ban-depan-kanan").innerText).replace(/\s+/g, ''),
+    banBelakangKiri: extractYear(document.getElementById("ban-belakang-kiri").innerText).replace(/\s+/g, ''),
+    banBelakangKanan: extractYear(document.getElementById("ban-belakang-kanan").innerText).replace(/\s+/g, '')
   };
 
   fetch("https://script.google.com/macros/s/AKfycbxTo5LwllmMtvhC3l5mgA-eGWBaqS5DF21rtDla8nFDBeaiknJ4KYG5ZsdQG8SAn_b6Xg/exec", {
@@ -193,14 +207,22 @@
     body: JSON.stringify(payload),
     headers: {
       "Content-Type": "application/json"
-    },mode: "no-cors"
+    },
+    mode: "no-cors"
   })
   .then(res => res.text())
-        .then(data => {
-          alert("✅ Data berhasil dikirim ke spreadsheet!");
-          resetAll();
-        });
+  .then(data => {
+    alert("✅ Data berhasil dikirim ke spreadsheet!");
+    resetAll();
+  })
+  .finally(() => {
+    // Sembunyikan loading dan aktifkan tombol kembali
+    submitBtn.disabled = false;
+    loadingOverlay.style.display = "none";
+    clearInterval(dotInterval);
+  });
 };
+
     
 window.resetAll = function () {
   accuEl.style.backgroundColor = getAccuColor("kosong");
@@ -360,6 +382,26 @@ function getAccuColor(status) {
 <div class="fixed bottom-2 left-4 text-sm text-gray-500 select-none">
   <span class="italic">©kaizenMan 2025 (Tunas Toyota Batutulis)</span>
 </div>
+
+  <div id="loading-overlay" style="
+  display: none;
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  font-size: 1.5rem;
+  flex-direction: column;
+">
+  <div id="loading-text">⌛ Mohon ditunggu<span id="dots">.</span></div>
+</div>
+
 
 </body>
 </html>
