@@ -663,31 +663,32 @@
           data.sort((a, b) => new Date(b.Date) - new Date(a.Date));
 
           dataList.innerHTML = ""; // Kosongkan sebelumnya
-          data.forEach(entry => {
+          data.forEach((entry, index) => {
             const div = document.createElement("div");
             div.className = "p-3 rounded-xl bg-gray-100 shadow";
 
             const platNomor = (entry["PoliceRegNo."] ?? "-").replace(/\s+/g, "").toUpperCase();
 
+            // Nomor urut dimulai dari 1 untuk yang terbaru
+            const number = index + 1;
+
             div.innerHTML = `
-  <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 0.3rem;">
-    ${platNomor}
-  </div>
-  <div style="margin-bottom: 0.2rem;">
-    🔋 <strong>Accu:</strong> ${entry["Kondisi Aki"] ?? "-"}
-  </div>
-  <div style="margin-bottom: 0.2rem;">
-    🛞 <strong>Ban Depan:</strong> Kiri: ${entry["Ban FR LH"] ?? "-"}, Kanan: ${entry["Ban FR RH"] ?? "-"}
-  </div>
-  <div style="margin-bottom: 0.4rem;">
-    🛞 <strong>Ban Belakang:</strong> Kiri: ${entry["Ban RR LH"] ?? "-"}, Kanan: ${entry["Ban RR RH"] ?? "-"}
-  </div>
-  <div style="font-size: 0.75rem; color: #666;">
-    ${new Date(entry.Date).toLocaleString("id-ID")}
-  </div>
+<div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 0.3rem;">
+  ${number}. ${platNomor}
+</div>
+<div style="margin-bottom: 0.2rem;">
+  🔋 <strong>Accu:</strong> ${entry["Kondisi Aki"] ?? "-"}
+</div>
+<div style="margin-bottom: 0.2rem;">
+  🛞 <strong>Ban Depan:</strong> Kiri: ${entry["Ban FR LH"] ?? "-"}, Kanan: ${entry["Ban FR RH"] ?? "-"}
+</div>
+<div style="margin-bottom: 0.4rem;">
+  🛞 <strong>Ban Belakang:</strong> Kiri: ${entry["Ban RR LH"] ?? "-"}, Kanan: ${entry["Ban RR RH"] ?? "-"}
+</div>
+<div style="font-size: 0.75rem; color: #666;">
+  ${new Date(entry.Date).toLocaleString("id-ID")}
+</div>
 `;
-
-
 
             dataList.appendChild(div);
           });
@@ -697,11 +698,7 @@
           console.error(err);
         });
     };
-
-
   </script>
-
-
 
 </body>
 
