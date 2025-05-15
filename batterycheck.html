@@ -378,7 +378,7 @@
           banBelakangKanan: extractYear(document.getElementById("ban-belakang-kanan").innerText).replace(/\s+/g, '')
         };
 
-        fetch("https://script.google.com/macros/s/AKfycbysDT5VKk_bSnVIxppfVyOKbx3cn9O23dtzqSOhC5vt6QTH0IJQrfCSpahLECRDlIHoaA/exec", {
+        fetch("https://script.google.com/macros/s/AKfycbxXY6wNv4guQ7_gpkRFZhfE7o_xXXhP1iiML5s-3yp8zQiH034915PgXzzhN-fmAswn7g/exec", {
           method: "POST",
           body: JSON.stringify(payload),
           headers: { "Content-Type": "application/json" },
@@ -656,7 +656,7 @@
       const dataList = document.getElementById("data-list");
       dataList.innerHTML = "Memuat...";
 
-      fetch("https://script.google.com/macros/s/AKfycbysDT5VKk_bSnVIxppfVyOKbx3cn9O23dtzqSOhC5vt6QTH0IJQrfCSpahLECRDlIHoaA/exec")
+      fetch("https://script.google.com/macros/s/AKfycbxXY6wNv4guQ7_gpkRFZhfE7o_xXXhP1iiML5s-3yp8zQiH034915PgXzzhN-fmAswn7g/exec")
         .then(res => res.json())
         .then(data => {
           // Sort Z-A berdasarkan tanggal
