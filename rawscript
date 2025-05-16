@@ -537,7 +537,7 @@
                                     let contactPromise = contactPersonId
                                     ? fetch(`https://tunastoyota.crm5.dynamics.com/api/data/v9.0/contacts(${contactPersonId})`)
                                     .then(response => response.json())
-                                    .then(contactData => ({ contactPerson: contactData?.fullname?.toUpperCase() || "" }))
+                                    .then(contactData => ({ contactPerson: contactData?.fullname?.toUpperCase().replaceAll(',', '.') || "" }))
                                     .catch(() => ({ contactPerson: "" }))
                                     : Promise.resolve({ contactPerson: "" });
 
