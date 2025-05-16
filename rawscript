@@ -525,7 +525,7 @@
                                     ? fetch(`https://tunastoyota.crm5.dynamics.com/api/data/v9.0/accounts(${customerId})`)
                                     .then(response => response.json())
                                     .then(customerData => ({
-                                        customerName: customerData?.name?.toUpperCase() || "-",
+                                        customerName: customerData?.name?.toUpperCase().replaceAll(',', '.') || "-",
                                         ownerPhone: customerData?.telephone3
                                         ? customerData.telephone3.replace(/[^\d]/g, "").replace(/^628|^\+628/, "08")
                                         : "-"
