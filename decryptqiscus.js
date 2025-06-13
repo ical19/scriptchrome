@@ -1,12 +1,3 @@
-// ==UserScript==
-// @name         Qiscus – Scan & Assign Amru + Modal Status (v4)
-// @namespace    http://tampermonkey.net/
-// @version      4.0
-// @description  Cek teks, assign ke Amru, tampilkan modal status, tombol stop, statistik proses
-// @match        https://omnichannel.qiscus.com/*
-// @grant        none
-// ==/UserScript==
-
 (function () {
   'use strict';
 
