@@ -4,15 +4,18 @@
   const KEYWORD = 'tunas toyota batu tulis';
   const AGENT_TEXT = 'amru batu tulis';
   let running = false;
+  let paused = false;
   let counters = {
     checked: 0,
     assigned: 0,
     startTime: null,
   };
 
-  /** ⬛ Tambahkan modal status bergaya material design */
   function createStatusModal() {
-    const modal = document.createElement('div');
+    let modal = document.getElementById('process-status-modal');
+    if (modal) modal.remove();
+
+    modal = document.createElement('div');
     modal.id = 'process-status-modal';
     modal.style.cssText = `
       position: fixed;
@@ -26,57 +29,86 @@
       font-family: "Roboto", sans-serif;
       font-size: 14px;
       z-index: 99999;
-      min-width: 280px;
+      min-width: 300px;
       max-width: 90%;
     `;
     modal.innerHTML = `
       <strong style="font-size: 16px; color: #333;">Status proses</strong>
       <div id="process-status-text" style="margin: 8px 0; color: #444;">Memulai...</div>
       <div id="process-stats" style="font-size: 13px; color: #555;"></div>
-      <button id="stop-script-btn" style="
-        margin-top: 10px;
-        padding: 6px 12px;
-        background-color: #e53935;
-        color: white;
-        border: none;
-        border-radius: 6px;
-        cursor: pointer;
-        font-weight: bold;
-      ">Stop</button>
+      <div style="margin-top: 12px; display: flex; gap: 6px; flex-wrap: wrap;">
+        <button id="pause-btn" style="${btnStyle()}">Pause</button>
+        <button id="continue-btn" style="${btnStyle('green')}">Continue</button>
+        <button id="stop-btn" style="${btnStyle('red')}">Stop</button>
+        <button id="close-btn" style="${btnStyle('gray')}">Close</button>
+      </div>
     `;
     document.body.appendChild(modal);
 
-    // Tombol stop
-    document.getElementById('stop-script-btn').onclick = () => {
-      updateStatus('⛔ Dihentikan pengguna');
+    document.getElementById('pause-btn').onclick = () => {
+      paused = true;
       running = false;
+      updateStatus('⏸️ Dijeda oleh pengguna');
+    };
+    document.getElementById('continue-btn').onclick = () => {
+      if (!running) {
+        paused = false;
+        running = true;
+        updateStatus('▶️ Lanjut memproses...');
+        processCurrentRoom();
+      }
+    };
+    document.getElementById('stop-btn').onclick = () => {
+      paused = false;
+      running = false;
+      updateStatus('⛔ Dihentikan pengguna');
+    };
+    document.getElementById('close-btn').onclick = () => {
+      modal.remove();
     };
   }
 
-  /** 📝 Update isi status */
+  function btnStyle(color = 'blue') {
+    const colors = {
+      blue: '#2196f3',
+      green: '#43a047',
+      red: '#e53935',
+      gray: '#757575',
+    };
+    return `
+      padding: 6px 12px;
+      background-color: ${colors[color]};
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      flex: 1;
+    `;
+  }
+
   function updateStatus(text) {
     const el = document.getElementById('process-status-text');
     if (el) el.textContent = text;
     updateStats();
   }
 
-  /** 📊 Update statistik */
   function updateStats() {
     const stats = document.getElementById('process-stats');
     const dur = ((Date.now() - counters.startTime) / 1000).toFixed(1);
     if (stats) {
       stats.innerHTML = `
-        🔄 Dicek: <b>${counters.checked}</b> | 
-        ✅ Di-assign: <b>${counters.assigned}</b> | 
+        🔄 Dicek: <b>${counters.checked}</b> |
+        ✅ Assign: <b>${counters.assigned}</b> |
         ⏱️ Durasi: <b>${dur}s</b>
       `;
     }
   }
 
-  /** 🚀 Trigger awal dengan tombol "/" */
   document.addEventListener('keydown', (e) => {
     if (e.key === '/' && !running) {
       running = true;
+      paused = false;
       counters.checked = 0;
       counters.assigned = 0;
       counters.startTime = Date.now();
@@ -86,9 +118,8 @@
     }
   });
 
-  /** ▶️ Proses satu chat */
   function processCurrentRoom() {
-    if (!running) return;
+    if (!running || paused) return;
 
     const active = document.querySelector('.room-item.active');
     if (!active) {
@@ -105,20 +136,19 @@
       ].map((el) => el.innerText.toLowerCase());
 
       if (messages.some((txt) => txt.includes(KEYWORD))) {
-        updateStatus('✅ Teks ditemukan, mulai assign ke Amru...');
+        updateStatus('✅ Teks ditemukan, assign ke Amru...');
         counters.assigned++;
         assignAmru(() => {
-          updateStatus('✔️ Assign selesai, lanjut ke chat berikutnya...');
+          updateStatus('✔️ Assign selesai, lanjut...');
           gotoNextRoom(processCurrentRoom);
         });
       } else {
-        updateStatus('❌ Teks tidak ditemukan, lanjut ke chat berikutnya...');
+        updateStatus('❌ Teks tidak ditemukan, lanjut...');
         gotoNextRoom(processCurrentRoom);
       }
     }, 1000);
   }
 
-  /** ⏩ Lanjut ke chat berikutnya */
   function gotoNextRoom(cb) {
     const current = document.querySelector('.room-item.active');
     const next = current?.nextElementSibling;
@@ -134,10 +164,9 @@
     }
   }
 
-  /** 👤 Alur assign ke Amru */
   function assignAmru(cb) {
     if (typeof openMenuAssign !== 'function') {
-      updateStatus('⚠️ Fungsi openMenuAssign tidak ditemukan!');
+      updateStatus('⚠️ openMenuAssign tidak ditemukan!');
       running = false;
       return;
     }
@@ -151,6 +180,7 @@
       if (!addAgent) return stop('❌ Tombol Add Agent tidak ditemukan');
       addAgent.click();
 
+      // ⏱️ Tambah delay 2 detik sebelum memilih agent
       setTimeout(() => {
         updateStatus('👥 Mencari agent Amru...');
         const agentLi = [...document.querySelectorAll('.agent-container ul li')]
@@ -175,7 +205,7 @@
             setTimeout(cb, 2000);
           }, 1000);
         }, 500);
-      }, 600);
+      }, 2000); // ⏱️ Delay di sini
     }, 600);
 
     function stop(msg) {
