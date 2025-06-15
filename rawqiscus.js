@@ -5,11 +5,7 @@
   let standbyInterval = null;
 
   const AGENT_TEXT = 'amru batu tulis';
-  const counters = {
-    checked: 0,
-    assigned: 0,
-    startTime: null,
-  };
+  const counters = { checked: 0, assigned: 0, startTime: null };
 
   function btnStyle(color = 'blue') {
     const colors = {
@@ -26,58 +22,53 @@
       border-radius: 6px;
       cursor: pointer;
       font-weight: bold;
-      flex: 1;
     `;
   }
 
-  function createStatusModal() {
-    let modal = document.getElementById('process-status-modal');
-    if (modal) modal.remove();
+  function createSidebar() {
+    let panel = document.getElementById('assign-sidebar-panel');
+    if (panel) panel.remove();
 
-    modal = document.createElement('div');
-    modal.id = 'process-status-modal';
-    modal.style.cssText = `
+    panel = document.createElement('div');
+    panel.id = 'assign-sidebar-panel';
+    panel.style.cssText = `
       position: fixed;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
+      top: 0;
+      right: 0;
+      width: 300px;
+      height: 100%;
       background: #ffffff;
-      border-radius: 12px;
-      padding: 16px 24px;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+      border-left: 2px solid #ddd;
+      box-shadow: -2px 0 8px rgba(0,0,0,0.15);
+      padding: 16px;
       font-family: "Roboto", sans-serif;
       font-size: 14px;
       z-index: 99999;
-      min-width: 300px;
-      max-width: 90%;
-      cursor: move;
+      overflow-y: auto;
     `;
-    modal.innerHTML = `
-      <div id="modal-header" style="cursor: move;"><strong style="font-size: 16px; color: #333;">Status proses</strong></div>
-      <div id="process-status-text" style="margin: 8px 0; color: #444;">Memulai...</div>
-      <div id="process-stats" style="font-size: 13px; color: #555;"></div>
-      <div style="margin-top: 12px; display: flex; gap: 6px; flex-wrap: wrap;">
-        <button id="pause-btn" style="${btnStyle()}">Pause</button>
-        <button id="continue-btn" style="${btnStyle('green')}">Continue</button>
-        <button id="stop-btn" style="${btnStyle('red')}">Stop</button>
-        <button id="close-btn" style="${btnStyle('gray')}">Close</button>
+
+    panel.innerHTML = `
+      <h3 style="margin-top: 0; color: #333;">🚀 Auto Assign Panel</h3>
+      <div id="process-status-text">Status: Menunggu mulai</div>
+      <div id="process-stats" style="margin: 8px 0;"></div>
+      <div style="margin: 8px 0;">
+        <label>Cari teks:</label>
+        <input id="keyword-input" type="text" value="${keyword}" style="width: 100%; padding: 4px;" />
       </div>
-      <div style="margin-top: 12px;">
-        <label>Cari teks:</label><br>
-        <input id="keyword-input" type="text" value="${keyword}" style="width:100%; margin-top:4px; padding:4px;" />
-        <br><br>
-        <label>Interval cek ulang (menit):</label><br>
-        <input id="interval-input" type="number" value="${intervalMinutes}" min="1" style="width:100%; margin-top:4px; padding:4px;" />
-        <br><br>
-        <button id="save-config" style="${btnStyle()} width:100%; margin-top:6px;">Simpan</button>
+      <div style="margin: 8px 0;">
+        <label>Interval cek ulang (menit):</label>
+        <input id="interval-input" type="number" value="${intervalMinutes}" min="1" style="width: 100%; padding: 4px;" />
       </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0;">
+        <button id="pause-btn" style="${btnStyle()} flex: 1;">Pause</button>
+        <button id="continue-btn" style="${btnStyle('green')} flex: 1;">Continue</button>
+        <button id="stop-btn" style="${btnStyle('red')} flex: 1;">Stop</button>
+      </div>
+      <button id="save-config" style="${btnStyle()} width: 100%;">💾 Simpan</button>
+      <button id="close-btn" style="${btnStyle('gray')} width: 100%; margin-top: 8px;">❌ Tutup Panel</button>
     `;
-    document.body.appendChild(modal);
+    document.body.appendChild(panel);
 
-    // Drag
-    makeModalDraggable(modal);
-
-    // Button handlers
     document.getElementById('pause-btn').onclick = () => {
       paused = true;
       running = false;
@@ -101,7 +92,7 @@
       toggleInputs(false);
       updateStatus('⛔ Dihentikan pengguna');
     };
-    document.getElementById('close-btn').onclick = () => modal.remove();
+    document.getElementById('close-btn').onclick = () => panel.remove();
 
     document.getElementById('save-config').onclick = () => {
       keyword = document.getElementById('keyword-input').value.toLowerCase();
@@ -118,27 +109,9 @@
     document.getElementById('save-config').disabled = disabled;
   }
 
-  function makeModalDraggable(modal) {
-    const header = modal.querySelector('#modal-header');
-    let offsetX = 0, offsetY = 0, isDragging = false;
-
-    header.onmousedown = (e) => {
-      isDragging = true;
-      offsetX = e.clientX - modal.offsetLeft;
-      offsetY = e.clientY - modal.offsetTop;
-    };
-    document.onmouseup = () => isDragging = false;
-    document.onmousemove = (e) => {
-      if (!isDragging) return;
-      modal.style.left = `${e.clientX - offsetX}px`;
-      modal.style.top = `${e.clientY - offsetY}px`;
-      modal.style.transform = 'none';
-    };
-  }
-
   function updateStatus(text) {
     const el = document.getElementById('process-status-text');
-    if (el) el.textContent = text;
+    if (el) el.textContent = `Status: ${text}`;
     updateStats();
   }
 
@@ -147,8 +120,8 @@
     const dur = ((Date.now() - counters.startTime) / 1000).toFixed(1);
     if (stats) {
       stats.innerHTML = `
-        🔄 Dicek: <b>${counters.checked}</b> |
-        ✅ Assign: <b>${counters.assigned}</b> |
+        🔄 Dicek: <b>${counters.checked}</b><br>
+        ✅ Assign: <b>${counters.assigned}</b><br>
         ⏱️ Durasi: <b>${dur}s</b>
       `;
     }
@@ -171,13 +144,14 @@
       counters.checked = 0;
       counters.assigned = 0;
       counters.startTime = Date.now();
-      createStatusModal();
+      createSidebar();
       updateStatus('Memulai proses...');
       processCurrentRoom();
       standbyWatcher();
     }
   });
 
+  // proses utama tetap sama
   function processCurrentRoom() {
     if (!running || paused) return;
 
@@ -191,9 +165,7 @@
     counters.checked++;
     updateStatus(`🔍 Mencari teks "${keyword.toUpperCase()}"...`);
     setTimeout(() => {
-      const messages = [
-        ...document.querySelectorAll('.qcw-comment__content')
-      ].map((el) => el.innerText.toLowerCase());
+      const messages = [...document.querySelectorAll('.qcw-comment__content')].map((el) => el.innerText.toLowerCase());
 
       if (messages.some((txt) => txt.includes(keyword))) {
         updateStatus('✅ Teks ditemukan, assign ke Amru...');
@@ -235,26 +207,22 @@
 
     setTimeout(() => {
       updateStatus('🔧 Klik Add Agent...');
-      const addAgent = [...document.querySelectorAll('#menu-assign li a')]
-        .find((a) => a.textContent.trim() === 'Add Agent');
+      const addAgent = [...document.querySelectorAll('#menu-assign li a')].find((a) => a.textContent.trim() === 'Add Agent');
       if (!addAgent) return stop('❌ Tombol Add Agent tidak ditemukan');
       addAgent.click();
 
-      // Jeda 2 detik
       setTimeout(() => {
         updateStatus('👥 Mencari agent Amru...');
-        const agentLi = [...document.querySelectorAll('.agent-container ul li')]
-          .find((li) => {
-            const p = li.querySelector('p[title]');
-            return p && p.title.toLowerCase().includes(AGENT_TEXT);
-          });
+        const agentLi = [...document.querySelectorAll('.agent-container ul li')].find((li) => {
+          const p = li.querySelector('p[title]');
+          return p && p.title.toLowerCase().includes(AGENT_TEXT);
+        });
         if (!agentLi) return stop('❌ Agent Amru tidak ditemukan');
         agentLi.click();
 
         setTimeout(() => {
           updateStatus('✅ Klik tombol Add...');
-          const addBtn = [...document.querySelectorAll('.agent-list__footer button')]
-            .find((b) => b.textContent.trim() === 'Add' && !b.disabled);
+          const addBtn = [...document.querySelectorAll('.agent-list__footer button')].find((b) => b.textContent.trim() === 'Add' && !b.disabled);
           if (!addBtn) return stop('❌ Tombol Add tidak aktif');
           addBtn.click();
 
