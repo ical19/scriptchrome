@@ -12,8 +12,15 @@
 
     const panel = document.createElement('div');
     panel.id = 'assign-left-panel';
-    panel.innerHTML = `
-      <div style="margin: 12px; padding: 10px; background: #fff; border-radius: 8px; font-size: 13px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+    panel.style.transition = 'all 0.3s ease';
+
+    const iconOnly = `
+      <div id="assign-icon" style="margin: 10px auto; text-align: center; cursor: pointer; font-size: 20px;">
+        ▶️
+      </div>`;
+
+    const fullPanel = `
+      <div id="assign-full" style="margin: 12px; padding: 10px; background: #fff; border-radius: 8px; font-size: 13px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
         <h4 style="margin: 0 0 8px 0;">📌 Auto Assign Panel</h4>
         <div id="status">Status: ⏹️</div>
         <div id="stats"></div>
@@ -29,7 +36,16 @@
         </div>
       </div>`;
 
+    panel.innerHTML = iconOnly + fullPanel;
     upperSidebar.appendChild(panel);
+
+    // Toggle tampilan berdasarkan apakah sidebar collapse
+    const observer = new MutationObserver(() => {
+      const collapsed = document.querySelector('.app-sidebar--collapsed');
+      document.getElementById('assign-full').style.display = collapsed ? 'none' : 'block';
+      document.getElementById('assign-icon').style.display = collapsed ? 'block' : 'none';
+    });
+    observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
 
     document.getElementById('pauseBtn').onclick = () => {
       paused = true;
