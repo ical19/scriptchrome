@@ -74,10 +74,8 @@
     `;
     document.body.appendChild(modal);
 
-    // Drag
     makeModalDraggable(modal);
 
-    // Button handlers
     document.getElementById('pause-btn').onclick = () => {
       paused = true;
       running = false;
@@ -158,8 +156,20 @@
     standbyInterval = setInterval(() => {
       if (!running && !paused) {
         console.log(`[AUTO-SCAN] Mulai ulang pengecekan...`);
-        running = true;
-        processCurrentRoom();
+        const firstRoom = document.querySelector('.room-item');
+        if (firstRoom) {
+          firstRoom.click();
+          setTimeout(() => {
+            running = true;
+            counters.checked = 0;
+            counters.assigned = 0;
+            counters.startTime = Date.now();
+            updateStatus('🔁 Standby aktif: memulai dari awal...');
+            processCurrentRoom();
+          }, 1000);
+        } else {
+          console.warn('❌ Tidak ada room-item ditemukan.');
+        }
       }
     }, intervalMinutes * 60 * 1000);
   }
@@ -191,11 +201,9 @@
     counters.checked++;
     updateStatus(`🔍 Mencari teks "${keyword.toUpperCase()}"...`);
     setTimeout(() => {
-      const messages = [
-        ...document.querySelectorAll('.qcw-comment__content')
-      ].map((el) => el.innerText.toLowerCase());
+      const messages = [...document.querySelectorAll('.qcw-comment__content')].map(el => el.innerText.toLowerCase());
 
-      if (messages.some((txt) => txt.includes(keyword))) {
+      if (messages.some(txt => txt.includes(keyword))) {
         updateStatus('✅ Teks ditemukan, assign ke Amru...');
         counters.assigned++;
         assignAmru(() => {
@@ -235,26 +243,22 @@
 
     setTimeout(() => {
       updateStatus('🔧 Klik Add Agent...');
-      const addAgent = [...document.querySelectorAll('#menu-assign li a')]
-        .find((a) => a.textContent.trim() === 'Add Agent');
+      const addAgent = [...document.querySelectorAll('#menu-assign li a')].find(a => a.textContent.trim() === 'Add Agent');
       if (!addAgent) return stop('❌ Tombol Add Agent tidak ditemukan');
       addAgent.click();
 
-      // Jeda 2 detik
       setTimeout(() => {
         updateStatus('👥 Mencari agent Amru...');
-        const agentLi = [...document.querySelectorAll('.agent-container ul li')]
-          .find((li) => {
-            const p = li.querySelector('p[title]');
-            return p && p.title.toLowerCase().includes(AGENT_TEXT);
-          });
+        const agentLi = [...document.querySelectorAll('.agent-container ul li')].find(li => {
+          const p = li.querySelector('p[title]');
+          return p && p.title.toLowerCase().includes(AGENT_TEXT);
+        });
         if (!agentLi) return stop('❌ Agent Amru tidak ditemukan');
         agentLi.click();
 
         setTimeout(() => {
           updateStatus('✅ Klik tombol Add...');
-          const addBtn = [...document.querySelectorAll('.agent-list__footer button')]
-            .find((b) => b.textContent.trim() === 'Add' && !b.disabled);
+          const addBtn = [...document.querySelectorAll('.agent-list__footer button')].find(b => b.textContent.trim() === 'Add' && !b.disabled);
           if (!addBtn) return stop('❌ Tombol Add tidak aktif');
           addBtn.click();
 
