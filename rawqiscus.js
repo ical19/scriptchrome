@@ -3,170 +3,273 @@
   let running = false;
   let paused = false;
   let standbyInterval = null;
+
   const AGENT_TEXT = 'amru batu tulis';
-  const counters = { checked: 0, assigned: 0, startTime: null };
+  const counters = {
+    checked: 0,
+    assigned: 0,
+    startTime: null,
+  };
 
-  function createSidebar() {
-    const upperSidebar = document.querySelector('.app-sidebar__upper');
-    if (!upperSidebar || document.getElementById('assign-left-panel')) return;
+  function btnStyle(color = 'blue') {
+    const colors = {
+      blue: '#2196f3',
+      green: '#43a047',
+      red: '#e53935',
+      gray: '#757575',
+    };
+    return `
+      padding: 6px 12px;
+      background-color: ${colors[color]};
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      flex: 1;
+    `;
+  }
 
-    const panel = document.createElement('div');
-    panel.id = 'assign-left-panel';
-    panel.style.transition = 'all 0.3s ease';
+  function createStatusModal() {
+    let modal = document.getElementById('process-status-modal');
+    if (modal) modal.remove();
 
-    const iconOnly = `
-      <div id="assign-icon" style="margin: 10px auto; text-align: center; cursor: pointer; font-size: 20px;">
-        ▶️
-      </div>`;
+    modal = document.createElement('div');
+    modal.id = 'process-status-modal';
+    modal.style.cssText = `
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 16px 24px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+      font-family: "Roboto", sans-serif;
+      font-size: 14px;
+      z-index: 99999;
+      min-width: 300px;
+      max-width: 90%;
+      cursor: move;
+    `;
+    modal.innerHTML = `
+      <div id="modal-header" style="cursor: move;"><strong style="font-size: 16px; color: #333;">Status proses</strong></div>
+      <div id="process-status-text" style="margin: 8px 0; color: #444;">Memulai...</div>
+      <div id="process-stats" style="font-size: 13px; color: #555;"></div>
+      <div style="margin-top: 12px; display: flex; gap: 6px; flex-wrap: wrap;">
+        <button id="pause-btn" style="${btnStyle()}">Pause</button>
+        <button id="continue-btn" style="${btnStyle('green')}">Continue</button>
+        <button id="stop-btn" style="${btnStyle('red')}">Stop</button>
+        <button id="close-btn" style="${btnStyle('gray')}">Close</button>
+      </div>
+      <div style="margin-top: 12px;">
+        <label>Cari teks:</label><br>
+        <input id="keyword-input" type="text" value="${keyword}" style="width:100%; margin-top:4px; padding:4px;" />
+        <br><br>
+        <label>Interval cek ulang (menit):</label><br>
+        <input id="interval-input" type="number" value="${intervalMinutes}" min="1" style="width:100%; margin-top:4px; padding:4px;" />
+        <br><br>
+        <button id="save-config" style="${btnStyle()} width:100%; margin-top:6px;">Simpan</button>
+      </div>
+    `;
+    document.body.appendChild(modal);
 
-    const fullPanel = `
-      <div id="assign-full" style="margin: 12px; padding: 10px; background: #fff; border-radius: 8px; font-size: 13px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-        <h4 style="margin: 0 0 8px 0;">📌 Auto Assign Panel</h4>
-        <div id="status">Status: ⏹️</div>
-        <div id="stats"></div>
-        <label>Teks:</label>
-        <input id="keyInput" value="${keyword}" style="width: 100%; padding: 4px; margin-bottom: 6px;" />
-        <label>Interval (m):</label>
-        <input id="intervalInput" type="number" min="1" value="${intervalMinutes}" style="width: 100%; padding: 4px; margin-bottom: 6px;" />
-        <div style="display: flex; flex-wrap: wrap; gap: 4px;">
-          <button id="pauseBtn" style="flex:1; ${btnStyle()}">Pause</button>
-          <button id="continueBtn" style="flex:1; ${btnStyle('green')}">Continue</button>
-          <button id="stopBtn" style="flex:1; ${btnStyle('red')}">Stop</button>
-          <button id="saveBtn" style="flex:1; ${btnStyle('gray')}">💾 Simpan</button>
-        </div>
-      </div>`;
+    // Drag
+    makeModalDraggable(modal);
 
-    panel.innerHTML = iconOnly + fullPanel;
-    upperSidebar.appendChild(panel);
-
-    // Toggle tampilan berdasarkan apakah sidebar collapse
-    const observer = new MutationObserver(() => {
-      const collapsed = document.querySelector('.app-sidebar--collapsed');
-      document.getElementById('assign-full').style.display = collapsed ? 'none' : 'block';
-      document.getElementById('assign-icon').style.display = collapsed ? 'block' : 'none';
-    });
-    observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
-
-    document.getElementById('pauseBtn').onclick = () => {
+    // Button handlers
+    document.getElementById('pause-btn').onclick = () => {
       paused = true;
       running = false;
       clearInterval(standbyInterval);
-      updateStatus('⏸️ Dijeda');
+      toggleInputs(false);
+      updateStatus('⏸️ Dijeda oleh pengguna');
     };
-    document.getElementById('continueBtn').onclick = () => {
+    document.getElementById('continue-btn').onclick = () => {
       if (!running) {
         paused = false;
         running = true;
-        counters.checked = 0;
-        counters.assigned = 0;
-        counters.startTime = Date.now();
-        updateStatus('▶️ Berjalan');
+        toggleInputs(true);
+        updateStatus('▶️ Lanjut memproses...');
         processCurrentRoom();
-        standbyWatcher();
       }
     };
-    document.getElementById('stopBtn').onclick = () => {
+    document.getElementById('stop-btn').onclick = () => {
       paused = false;
       running = false;
       clearInterval(standbyInterval);
-      updateStatus('⛔ Dihentikan');
+      toggleInputs(false);
+      updateStatus('⛔ Dihentikan pengguna');
     };
-    document.getElementById('saveBtn').onclick = () => {
-      keyword = document.getElementById('keyInput').value.toLowerCase();
-      intervalMinutes = Math.max(1, parseInt(document.getElementById('intervalInput').value));
-      alert('✅ Disimpan!');
+    document.getElementById('close-btn').onclick = () => modal.remove();
+
+    document.getElementById('save-config').onclick = () => {
+      keyword = document.getElementById('keyword-input').value.toLowerCase();
+      intervalMinutes = Math.max(1, parseInt(document.getElementById('interval-input').value));
+      alert('✅ Konfigurasi disimpan.');
     };
 
-    updateStatus('⏹️ Siap');
+    toggleInputs(true);
+  }
+
+  function toggleInputs(disabled) {
+    document.getElementById('keyword-input').disabled = disabled;
+    document.getElementById('interval-input').disabled = disabled;
+    document.getElementById('save-config').disabled = disabled;
+  }
+
+  function makeModalDraggable(modal) {
+    const header = modal.querySelector('#modal-header');
+    let offsetX = 0, offsetY = 0, isDragging = false;
+
+    header.onmousedown = (e) => {
+      isDragging = true;
+      offsetX = e.clientX - modal.offsetLeft;
+      offsetY = e.clientY - modal.offsetTop;
+    };
+    document.onmouseup = () => isDragging = false;
+    document.onmousemove = (e) => {
+      if (!isDragging) return;
+      modal.style.left = `${e.clientX - offsetX}px`;
+      modal.style.top = `${e.clientY - offsetY}px`;
+      modal.style.transform = 'none';
+    };
   }
 
   function updateStatus(text) {
-    const el = document.getElementById('status');
-    if (el) el.innerText = `Status: ${text}`;
-    const dur = ((Date.now() - (counters.startTime || Date.now())) / 1000).toFixed(1);
-    const stats = document.getElementById('stats');
-    if (stats) stats.innerHTML = `✔️ Cek: ${counters.checked}, ✅ Assign: ${counters.assigned}, ⏱️ ${dur}s`;
+    const el = document.getElementById('process-status-text');
+    if (el) el.textContent = text;
+    updateStats();
   }
 
-  function btnStyle(color = 'blue') {
-    const c = {
-      blue: '#2196f3', green: '#4caf50', red: '#f44336', gray: '#9e9e9e',
-    }[color];
-    return `background:${c};color:#fff;border:none;padding:4px;border-radius:4px;font-size:12px;cursor:pointer;`;
+  function updateStats() {
+    const stats = document.getElementById('process-stats');
+    const dur = ((Date.now() - counters.startTime) / 1000).toFixed(1);
+    if (stats) {
+      stats.innerHTML = `
+        🔄 Dicek: <b>${counters.checked}</b> |
+        ✅ Assign: <b>${counters.assigned}</b> |
+        ⏱️ Durasi: <b>${dur}s</b>
+      `;
+    }
   }
 
   function standbyWatcher() {
     standbyInterval = setInterval(() => {
       if (!running && !paused) {
+        console.log(`[AUTO-SCAN] Mulai ulang pengecekan...`);
         running = true;
-        updateStatus('🔁 Auto mulai...');
         processCurrentRoom();
       }
     }, intervalMinutes * 60 * 1000);
   }
 
+  document.addEventListener('keydown', (e) => {
+    if (e.key === '/' && !running) {
+      running = true;
+      paused = false;
+      counters.checked = 0;
+      counters.assigned = 0;
+      counters.startTime = Date.now();
+      createStatusModal();
+      updateStatus('Memulai proses...');
+      processCurrentRoom();
+      standbyWatcher();
+    }
+  });
+
   function processCurrentRoom() {
     if (!running || paused) return;
 
     const active = document.querySelector('.room-item.active');
-    if (!active) return updateStatus('❌ Tidak ada chat aktif');
+    if (!active) {
+      updateStatus('❌ Tidak ada chat aktif');
+      running = false;
+      return;
+    }
 
     counters.checked++;
-    updateStatus(`🔍 Cek teks: "${keyword}"...`);
+    updateStatus(`🔍 Mencari teks "${keyword.toUpperCase()}"...`);
     setTimeout(() => {
-      const msgs = [...document.querySelectorAll('.qcw-comment__content')].map(e => e.innerText.toLowerCase());
-      if (msgs.some(txt => txt.includes(keyword))) {
+      const messages = [
+        ...document.querySelectorAll('.qcw-comment__content')
+      ].map((el) => el.innerText.toLowerCase());
+
+      if (messages.some((txt) => txt.includes(keyword))) {
+        updateStatus('✅ Teks ditemukan, assign ke Amru...');
         counters.assigned++;
-        updateStatus('✅ Teks cocok. Assign...');
-        assignToAmru(() => {
-          updateStatus('✔️ Assign selesai');
-          nextRoom(processCurrentRoom);
+        assignAmru(() => {
+          updateStatus('✔️ Assign selesai, lanjut...');
+          gotoNextRoom(processCurrentRoom);
         });
       } else {
-        updateStatus('➡️ Lanjut ke chat berikutnya');
-        nextRoom(processCurrentRoom);
+        updateStatus('❌ Teks tidak ditemukan, lanjut...');
+        gotoNextRoom(processCurrentRoom);
       }
     }, 1000);
   }
 
-  function nextRoom(cb) {
-    const curr = document.querySelector('.room-item.active');
-    const next = curr?.nextElementSibling;
+  function gotoNextRoom(cb) {
+    const current = document.querySelector('.room-item.active');
+    const next = current?.nextElementSibling;
     if (next) {
       next.click();
-      setTimeout(cb, 800);
+      setTimeout(() => {
+        updateStatus('🔄 Memproses chat berikutnya...');
+        cb();
+      }, 800);
     } else {
-      updateStatus('🏁 Selesai. Standby...');
+      updateStatus('🏁 Semua chat selesai diproses. Standby aktif...');
       running = false;
     }
   }
 
-  function assignToAmru(cb) {
-    if (typeof openMenuAssign !== 'function') return updateStatus('⚠️ Menu assign tidak ditemukan');
-    openMenuAssign();
-    setTimeout(() => {
-      const add = [...document.querySelectorAll('#menu-assign li a')].find(a => a.textContent.includes('Add Agent'));
-      if (!add) return updateStatus('❌ Add Agent tidak ditemukan');
-      add.click();
-      setTimeout(() => {
-        const agent = [...document.querySelectorAll('.agent-container ul li p[title]')].find(p => p.title.toLowerCase().includes(AGENT_TEXT));
-        if (!agent) return updateStatus('❌ Agent tidak ditemukan');
-        agent.closest('li').click();
-        setTimeout(() => {
-          const btn = [...document.querySelectorAll('.agent-list__footer button')].find(b => b.textContent.includes('Add'));
-          if (!btn || btn.disabled) return updateStatus('❌ Tombol Add tidak aktif');
-          btn.click();
-          setTimeout(() => {
-            const ok = document.querySelector('.swal2-confirm');
-            if (ok) ok.click();
-            setTimeout(cb, 1000);
-          }, 600);
-        }, 600);
-      }, 1000);
-    }, 500);
-  }
+  function assignAmru(cb) {
+    if (typeof openMenuAssign !== 'function') {
+      updateStatus('⚠️ openMenuAssign tidak ditemukan!');
+      running = false;
+      return;
+    }
 
-  // Aktifkan panel saat tombol / ditekan
-  document.addEventListener('keydown', (e) => {
-    if (e.key === '/' && !document.getElementById('assign-left-panel')) createSidebar();
-  });
+    openMenuAssign();
+
+    setTimeout(() => {
+      updateStatus('🔧 Klik Add Agent...');
+      const addAgent = [...document.querySelectorAll('#menu-assign li a')]
+        .find((a) => a.textContent.trim() === 'Add Agent');
+      if (!addAgent) return stop('❌ Tombol Add Agent tidak ditemukan');
+      addAgent.click();
+
+      // Jeda 2 detik
+      setTimeout(() => {
+        updateStatus('👥 Mencari agent Amru...');
+        const agentLi = [...document.querySelectorAll('.agent-container ul li')]
+          .find((li) => {
+            const p = li.querySelector('p[title]');
+            return p && p.title.toLowerCase().includes(AGENT_TEXT);
+          });
+        if (!agentLi) return stop('❌ Agent Amru tidak ditemukan');
+        agentLi.click();
+
+        setTimeout(() => {
+          updateStatus('✅ Klik tombol Add...');
+          const addBtn = [...document.querySelectorAll('.agent-list__footer button')]
+            .find((b) => b.textContent.trim() === 'Add' && !b.disabled);
+          if (!addBtn) return stop('❌ Tombol Add tidak aktif');
+          addBtn.click();
+
+          setTimeout(() => {
+            updateStatus('📩 Klik OK setelah assign...');
+            const ok = document.querySelector('.swal2-confirm.swal2-styled');
+            if (ok) ok.click();
+            setTimeout(cb, 2000);
+          }, 1000);
+        }, 500);
+      }, 2000);
+    }, 600);
+
+    function stop(msg) {
+      updateStatus(msg);
+      running = false;
+    }
+  }
