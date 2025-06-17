@@ -11,126 +11,100 @@
     startTime: null,
   };
 
-  function btnStyle(color = 'blue') {
+  function btnStyle(color = 'primary') {
     const colors = {
-      blue: '#2196f3',
+      primary: '#00B386',
       green: '#43a047',
       red: '#e53935',
-      gray: '#757575',
+      gray: '#e0e0e0',
     };
     return `
-      padding: 6px 12px;
+      padding: 8px 16px;
       background-color: ${colors[color]};
       color: white;
       border: none;
       border-radius: 6px;
       cursor: pointer;
-      font-weight: bold;
+      font-weight: 600;
+      font-size: 14px;
       flex: 1;
     `;
   }
 
   function createStatusModal() {
-    let modal = document.getElementById('process-status-modal');
+    let modal = document.getElementById('qiscus-status-modal');
     if (modal) modal.remove();
 
     modal = document.createElement('div');
-    modal.id = 'process-status-modal';
+    modal.id = 'qiscus-status-modal';
     modal.style.cssText = `
       position: fixed;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #ffffff;
-      border-radius: 12px;
-      padding: 16px 24px;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-      font-family: "Roboto", sans-serif;
+      top: 80px;
+      right: 40px;
+      background: #fff;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+      font-family: "Inter", sans-serif;
       font-size: 14px;
       z-index: 99999;
-      min-width: 300px;
-      max-width: 90%;
-      cursor: move;
+      width: 320px;
     `;
     modal.innerHTML = `
-      <div id="modal-header" style="cursor: move;"><strong style="font-size: 16px; color: #333;">Status proses</strong></div>
-      <div id="process-status-text" style="margin: 8px 0; color: #444;">Memulai...</div>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="#00B386"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-2.83.48-5.66-.3-7.78-2.42C3.3 15.07 2.52 12.24 3 9.41 3.72 5.26 7.26 2 12 2v2c-3.86 0-7 3.14-7 7s3.14 7 7 7v2zm-1-6h2V7h-2v6zm0 4h2v-2h-2v2z"/></svg>
+        <strong style="font-size: 16px; color: #333;">Status Proses</strong>
+      </div>
+      <div id="process-status-text" style="margin: 10px 0; color: #444;">Memulai...</div>
       <div id="process-stats" style="font-size: 13px; color: #555;"></div>
       <div style="margin-top: 12px; display: flex; gap: 6px; flex-wrap: wrap;">
         <button id="pause-btn" style="${btnStyle()}">Pause</button>
         <button id="continue-btn" style="${btnStyle('green')}">Continue</button>
         <button id="stop-btn" style="${btnStyle('red')}">Stop</button>
-        <button id="close-btn" style="${btnStyle('gray')}">Close</button>
+        <button id="close-btn" style="${btnStyle('gray')}; color: #333;">Close</button>
       </div>
-      <div style="margin-top: 12px;">
-        <label>Cari teks:</label><br>
-        <input id="keyword-input" type="text" value="${keyword}" style="width:100%; margin-top:4px; padding:4px;" />
+      <hr style="margin: 16px 0; border: none; border-top: 1px solid #eee;">
+      <div>
+        <label style="color: #555; font-weight: 600;">Kata kunci pencarian:</label>
+        <input id="keyword-input" type="text" value="${keyword}" style="width: 100%; margin-top: 4px; padding: 6px; border: 1px solid #ccc; border-radius: 4px;" />
         <br><br>
-        <label>Interval cek ulang (menit):</label><br>
-        <input id="interval-input" type="number" value="${intervalMinutes}" min="1" style="width:100%; margin-top:4px; padding:4px;" />
+        <label style="color: #555; font-weight: 600;">Interval ulang (menit):</label>
+        <input id="interval-input" type="number" value="${intervalMinutes}" min="1" style="width: 100%; margin-top: 4px; padding: 6px; border: 1px solid #ccc; border-radius: 4px;" />
         <br><br>
-        <button id="save-config" style="${btnStyle()} width:100%; margin-top:6px;">Simpan</button>
+        <button id="save-config" style="${btnStyle()} width: 100%;">Simpan</button>
       </div>
     `;
+
     document.body.appendChild(modal);
+    setupModalButtons();
+  }
 
-    makeModalDraggable(modal);
-
+  function setupModalButtons() {
     document.getElementById('pause-btn').onclick = () => {
       paused = true;
       running = false;
       clearInterval(standbyInterval);
-      toggleInputs(false);
       updateStatus('⏸️ Dijeda oleh pengguna');
     };
     document.getElementById('continue-btn').onclick = () => {
       if (!running) {
         paused = false;
         running = true;
-        toggleInputs(true);
         updateStatus('▶️ Lanjut memproses...');
-        processCurrentRoom();
+        processRooms();
       }
     };
     document.getElementById('stop-btn').onclick = () => {
       paused = false;
       running = false;
       clearInterval(standbyInterval);
-      toggleInputs(false);
       updateStatus('⛔ Dihentikan pengguna');
     };
-    document.getElementById('close-btn').onclick = () => modal.remove();
-
+    document.getElementById('close-btn').onclick = () => document.getElementById('qiscus-status-modal').remove();
     document.getElementById('save-config').onclick = () => {
       keyword = document.getElementById('keyword-input').value.toLowerCase();
       intervalMinutes = Math.max(1, parseInt(document.getElementById('interval-input').value));
       alert('✅ Konfigurasi disimpan.');
-    };
-
-    toggleInputs(true);
-  }
-
-  function toggleInputs(disabled) {
-    document.getElementById('keyword-input').disabled = disabled;
-    document.getElementById('interval-input').disabled = disabled;
-    document.getElementById('save-config').disabled = disabled;
-  }
-
-  function makeModalDraggable(modal) {
-    const header = modal.querySelector('#modal-header');
-    let offsetX = 0, offsetY = 0, isDragging = false;
-
-    header.onmousedown = (e) => {
-      isDragging = true;
-      offsetX = e.clientX - modal.offsetLeft;
-      offsetY = e.clientY - modal.offsetTop;
-    };
-    document.onmouseup = () => isDragging = false;
-    document.onmousemove = (e) => {
-      if (!isDragging) return;
-      modal.style.left = `${e.clientX - offsetX}px`;
-      modal.style.top = `${e.clientY - offsetY}px`;
-      modal.style.transform = 'none';
     };
   }
 
@@ -152,41 +126,25 @@
     }
   }
 
+  function processRooms() {
+    const firstRoom = document.querySelector('.room-item');
+    if (!firstRoom) return updateStatus('❌ Tidak ada daftar chat');
+    firstRoom.click();
+    setTimeout(() => processCurrentRoom(), 800);
+  }
+
   function standbyWatcher() {
     standbyInterval = setInterval(() => {
       if (!running && !paused) {
-        console.log(`[AUTO-SCAN] Mulai ulang pengecekan...`);
-        const firstRoom = document.querySelector('.room-item');
-        if (firstRoom) {
-          firstRoom.click();
-          setTimeout(() => {
-            running = true;
-            counters.checked = 0;
-            counters.assigned = 0;
-            counters.startTime = Date.now();
-            updateStatus('🔁 Standby aktif: memulai dari awal...');
-            processCurrentRoom();
-          }, 1000);
-        } else {
-          console.warn('❌ Tidak ada room-item ditemukan.');
-        }
+        running = true;
+        counters.startTime = Date.now();
+        counters.checked = 0;
+        counters.assigned = 0;
+        updateStatus('🔄 Standby aktif: mulai ulang...');
+        processRooms();
       }
-    }, intervalMinutes * 60 * 1000);
+    }, intervalMinutes * 60000);
   }
-
-  document.addEventListener('keydown', (e) => {
-    if (e.key === '/' && !running) {
-      running = true;
-      paused = false;
-      counters.checked = 0;
-      counters.assigned = 0;
-      counters.startTime = Date.now();
-      createStatusModal();
-      updateStatus('Memulai proses...');
-      processCurrentRoom();
-      standbyWatcher();
-    }
-  });
 
   function processCurrentRoom() {
     if (!running || paused) return;
@@ -199,19 +157,18 @@
     }
 
     counters.checked++;
-    updateStatus(`🔍 Mencari teks "${keyword.toUpperCase()}"...`);
-    setTimeout(() => {
-      const messages = [...document.querySelectorAll('.qcw-comment__content')].map(el => el.innerText.toLowerCase());
+    updateStatus(`🔍 Mencari "${keyword.toUpperCase()}"...`);
 
+    setTimeout(() => {
+      const messages = [...document.querySelectorAll('.qcw-comment__content')].map(e => e.innerText.toLowerCase());
       if (messages.some(txt => txt.includes(keyword))) {
-        updateStatus('✅ Teks ditemukan, assign ke Amru...');
+        updateStatus('✅ Teks ditemukan. Assign ke Amru...');
         counters.assigned++;
         assignAmru(() => {
-          updateStatus('✔️ Assign selesai, lanjut...');
           gotoNextRoom(processCurrentRoom);
         });
       } else {
-        updateStatus('❌ Teks tidak ditemukan, lanjut...');
+        updateStatus('⏭️ Tidak ditemukan. Lanjut...');
         gotoNextRoom(processCurrentRoom);
       }
     }, 1000);
@@ -222,54 +179,43 @@
     const next = current?.nextElementSibling;
     if (next) {
       next.click();
-      setTimeout(() => {
-        updateStatus('🔄 Memproses chat berikutnya...');
-        cb();
-      }, 800);
+      setTimeout(() => cb(), 700);
     } else {
-      updateStatus('🏁 Semua chat selesai diproses. Standby aktif...');
+      updateStatus('🏁 Semua chat selesai. Menunggu...');
       running = false;
     }
   }
 
   function assignAmru(cb) {
     if (typeof openMenuAssign !== 'function') {
-      updateStatus('⚠️ openMenuAssign tidak ditemukan!');
+      updateStatus('⚠️ openMenuAssign tidak tersedia');
       running = false;
       return;
     }
 
     openMenuAssign();
-
     setTimeout(() => {
-      updateStatus('🔧 Klik Add Agent...');
       const addAgent = [...document.querySelectorAll('#menu-assign li a')].find(a => a.textContent.trim() === 'Add Agent');
-      if (!addAgent) return stop('❌ Tombol Add Agent tidak ditemukan');
+      if (!addAgent) return stop('❌ Add Agent tidak ditemukan');
       addAgent.click();
 
       setTimeout(() => {
-        updateStatus('👥 Mencari agent Amru...');
-        const agentLi = [...document.querySelectorAll('.agent-container ul li')].find(li => {
-          const p = li.querySelector('p[title]');
-          return p && p.title.toLowerCase().includes(AGENT_TEXT);
-        });
-        if (!agentLi) return stop('❌ Agent Amru tidak ditemukan');
+        const agentLi = [...document.querySelectorAll('.agent-container ul li')].find(li => li.querySelector('p[title]')?.title.toLowerCase().includes(AGENT_TEXT));
+        if (!agentLi) return stop('❌ Agent tidak ditemukan');
         agentLi.click();
 
         setTimeout(() => {
-          updateStatus('✅ Klik tombol Add...');
           const addBtn = [...document.querySelectorAll('.agent-list__footer button')].find(b => b.textContent.trim() === 'Add' && !b.disabled);
           if (!addBtn) return stop('❌ Tombol Add tidak aktif');
           addBtn.click();
 
           setTimeout(() => {
-            updateStatus('📩 Klik OK setelah assign...');
             const ok = document.querySelector('.swal2-confirm.swal2-styled');
             if (ok) ok.click();
-            setTimeout(cb, 2000);
+            setTimeout(cb, 1500);
           }, 1000);
-        }, 500);
-      }, 2000);
+        }, 600);
+      }, 1200);
     }, 600);
 
     function stop(msg) {
@@ -277,3 +223,17 @@
       running = false;
     }
   }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === '/' && !running) {
+      running = true;
+      paused = false;
+      counters.checked = 0;
+      counters.assigned = 0;
+      counters.startTime = Date.now();
+      createStatusModal();
+      updateStatus('🔄 Memulai...');
+      processRooms();
+      standbyWatcher();
+    }
+  });
