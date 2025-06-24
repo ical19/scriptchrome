@@ -1,0 +1,177 @@
+  const firebaseConfig = {
+    apiKey: "AIzaSyBdscGfLWChzQ79k5OBseKRc67eEQjm7t8",
+    authDomain: "booking-toyota.firebaseapp.com",
+    projectId: "booking-toyota",
+    storageBucket: "booking-toyota.firebasestorage.app",
+    messagingSenderId: "731782590084",
+    appId: "1:731782590084:web:e9886b1641e3304f3c5cd1",
+    measurementId: "G-3NM0JNG9KT"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  const NOTE_OPTIONS = [
+    "Akan Konfirmasi", "Booking", "Bukan User", "Dialihkan", "Early",
+    "Jauh Dari Batu Tulis", "Kecewa", "Late (Batu Tulis)", "Late (Non Tunas)",
+    "Late (Tunas Group)", "Mailbox", "Mobil Di jual", "Mobil di Luar Kota",
+    "Mobil Operasional", "Nomor Salah", "Recall", "Rental", "Salah Sambung",
+    "Tidak Aktif", "Tidak Diangkat", "Tulalit/Tidak Terdaftar", "Dikembalikan Ke Rental"
+  ];
+
+  function getCustomerInfo() {
+    const container = document.querySelector(".conversation-info__user-info");
+    if (!container) return { nama: null, nomor: null };
+
+    const nama = container.querySelector(".text-ellipsis")?.textContent.trim() || null;
+    const nomor = Array.from(container.querySelectorAll("div"))
+      .map(div => div.textContent.trim())
+      .find(text => /^62\d{8,15}$/.test(text)) || null;
+
+    return { nama, nomor };
+  }
+
+  function getSessionIdFromUrl() {
+    const hash = window.location.hash;
+    const match = hash.match(/id=(\d+)/);
+    return match ? match[1] : null;
+  }
+
+  let tempDocId = null;
+  let currentSubmitButton = null;
+
+  function injectDropdownIfNeeded() {
+    const modalContainer = document.querySelector(".modal-content") || document.querySelector(".CodeMirror")?.parentElement;
+    if (!modalContainer || document.getElementById("tm-note-select")) return;
+
+    const wrapper = document.createElement("div");
+    wrapper.style.marginTop = "12px";
+    wrapper.style.padding = "12px";
+    wrapper.style.borderTop = "1px solid #ddd";
+
+    const label = document.createElement("label");
+    label.textContent = "📌 Alasan Resolved (Wajib Pilih):";
+    label.style.display = "block";
+    label.style.fontWeight = "600";
+    label.style.marginBottom = "4px";
+    label.style.fontSize = "14px";
+
+    const select = document.createElement("select");
+    select.id = "tm-note-select";
+    select.className = "tm-note-dropdown";
+    select.style.width = "100%";
+    select.style.padding = "10px";
+    select.style.border = "1px solid #ccc";
+    select.style.borderRadius = "6px";
+    select.style.fontSize = "14px";
+    select.style.marginTop = "4px";
+
+    const defaultOption = document.createElement("option");
+    defaultOption.value = "";
+    defaultOption.textContent = "-- Pilih catatan cepat --";
+    select.appendChild(defaultOption);
+
+    NOTE_OPTIONS.forEach(option => {
+      const el = document.createElement("option");
+      el.value = option;
+      el.textContent = option;
+      select.appendChild(el);
+    });
+
+    select.addEventListener("change", async () => {
+      const selected = select.value;
+      const { nama, nomor } = getCustomerInfo();
+      const sessionId = getSessionIdFromUrl();
+
+      if (!selected || !nama || !nomor || !sessionId) return;
+
+      try {
+        const docRef = await db.collection("resolved_logs").add({
+          nama,
+          nomor,
+          sessionId,
+          notes: selected,
+          resolvedAt: firebase.firestore.Timestamp.now()
+        });
+        tempDocId = docRef.id;
+        console.log("[TM] ✅ Notes dikirim awal:", selected);
+        if (currentSubmitButton) currentSubmitButton.disabled = false;
+      } catch (e) {
+        console.error("[TM] ❌ Gagal kirim notes awal:", e);
+      }
+    });
+
+    wrapper.appendChild(label);
+    wrapper.appendChild(select);
+    modalContainer.appendChild(wrapper);
+  }
+
+  const waitForFunction = (fnName, callback) => {
+    const interval = setInterval(() => {
+      if (typeof window[fnName] === 'function') {
+        clearInterval(interval);
+        callback(window[fnName]);
+      }
+    }, 500);
+  };
+
+  waitForFunction("openMenuResolved", (originalFn) => {
+    console.log("[TM] ✅ openMenuResolved ditemukan.");
+
+    window.openMenuResolved = function () {
+      console.log("[TM] 🟢 openMenuResolved dipanggil.");
+      originalFn.apply(this, arguments);
+
+      const retryInject = setInterval(() => {
+        const existing = document.getElementById("tm-note-select");
+        if (!existing) {
+          injectDropdownIfNeeded();
+        } else {
+          clearInterval(retryInject);
+        }
+      }, 300);
+
+      const observer = new MutationObserver(() => {
+        const buttons = document.querySelectorAll("button");
+        buttons.forEach((btn) => {
+          if (
+            btn.textContent.trim().toLowerCase() === "submit" &&
+            !btn.dataset.tmHandled
+          ) {
+            btn.dataset.tmHandled = "1";
+            btn.textContent = "Submit Sekarang ✅";
+            btn.disabled = true;
+            currentSubmitButton = btn;
+
+            btn.addEventListener("click", async () => {
+              const { nama, nomor } = getCustomerInfo();
+              const sessionId = getSessionIdFromUrl();
+
+              if (!tempDocId) {
+                console.warn("[TM] ❌ Belum ada data awal, submit dibatalkan.");
+                return;
+              }
+
+              try {
+                await db.collection("resolved_logs").doc(tempDocId).update({
+                  nama,
+                  nomor,
+                  sessionId,
+                  resolvedAt: firebase.firestore.Timestamp.now()
+                });
+                console.log("[TM] ✅ Data resolved diupdate pada:", tempDocId);
+              } catch (e) {
+                console.error("[TM] ❌ Gagal update data resolved:", e);
+              }
+            });
+
+            observer.disconnect();
+          }
+        });
+      });
+
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+      });
+    };
+  });
