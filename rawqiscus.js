@@ -1,10 +1,10 @@
-    let keyword = 'tunas toyota batu tulis';
+let keyword = 'tunas toyota batu tulis';
     let intervalMinutes = 1;
     let running = false;
     let paused = false;
     let standbyInterval = null;
 
-    const AGENT_TEXT = 'amru batu tulis';
+    let AGENT_TEXT = 'amru batu tulis';
     const counters = { checked: 0, assigned: 0, startTime: null };
 
     const iosGreen = '#34C759';
@@ -76,6 +76,14 @@
           <input id="keyword-input" type="text" value="${keyword}" style="width: 100%; padding: 6px; border-radius: 10px; border: 1px solid #ccc;">
           <label style="margin-top: 10px; display:block;">Interval ulang (menit):</label>
           <input id="interval-input" type="number" value="${intervalMinutes}" min="1" style="width: 100%; padding: 6px; border-radius: 10px; border: 1px solid #ccc;">
+          <label style="margin-top: 10px; display:block;">Pilih Agent:</label>
+          <select id="agent-select" style="width: 100%; padding: 6px; border-radius: 10px; border: 1px solid #ccc;margin-bottom: 12px;">
+            <option value="amru batu tulis">amru batu tulis</option>
+            <option value="tunas bekasi">tunas bekasi</option>
+            <option value="tunas bintaro">tunas bintaro</option>
+            <option value="tunas dewi sartika">tunas dewi sartika</option>
+            <option value="tunas ho">tunas ho</option>
+          </select>
           <button id="save-config" style="${btnStyle('green')}; width: 100%; margin-top: 10px;">Simpan</button>
         </div>
       </div>
@@ -135,7 +143,8 @@
         document.getElementById('save-config').onclick = () => {
             keyword = document.getElementById('keyword-input').value.toLowerCase();
             intervalMinutes = Math.max(1, parseInt(document.getElementById('interval-input').value));
-            alert('✅ Konfigurasi disimpan.');
+            AGENT_TEXT = document.getElementById('agent-select').value.toLowerCase();
+            alert('✅ AGENT:'+AGENT_TEXT+'\nKey:'+keyword+'\nInterval:'+intervalMinutes);
         };
         document.getElementById('close-btn').onclick = () => {
             document.getElementById('qiscus-status-modal').style.display = 'none';
