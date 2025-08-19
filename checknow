@@ -1,0 +1,426 @@
+(function () {
+  'use strict';
+
+  /********************* CONFIG *********************/
+  const FB = {
+    apiKey: "AIzaSyCIFQPklgevLVnqsjeG3K5s6JuwZF76r8s",
+    authDomain: "tunas-tyt.firebaseapp.com",
+    databaseURL: "https://tunas-tyt-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "tunas-tyt",
+    storageBucket: "tunas-tyt.firebasestorage.app",
+    messagingSenderId: "1066204149365",
+    appId: "1:1066204149365:web:7d7ec14c437dec32236a3c",
+    measurementId: "G-MNCJ1V37ZP",
+  };
+
+  const PATH = {
+    pending: "pending",
+    valid: "valid",
+    invalid: "invalid",
+  };
+
+  const SEL = {
+    phone:  "input[aria-label='Mobile Phone']",
+    plate:  "input[aria-label='Plate No.']",
+    // elemen teks VIN (nomor rangka) ada pada data-id yang berakhiran selected_tag_text dan mengandung vehicleidentificationid
+    vinText: "[data-id$='selected_tag_text'][data-id*='vehicleidentificationid']"
+  };
+
+  const TOAST_AUTOHIDE_MS = 5000;
+  const RESCAN_MS = 2000; // Kurangi frekuensi scanning
+  const LOGP = "[WA-CHECK]";
+
+  /**************** Style Minimalis ****************/
+  const addStyle = (css) => {
+    try { GM_addStyle(css); } catch (_) {
+      const s = document.createElement("style");
+      s.textContent = css;
+      document.head.appendChild(s);
+    }
+  };
+
+  addStyle(`
+    #wa-toast-container {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .wa-toast {
+      min-width: 300px;
+      max-width: 400px;
+      pointer-events: auto;
+      animation: waSlideIn 0.4s ease-out forwards;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      border-radius: 6px;
+      overflow: hidden;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: white;
+      border-left: 5px solid #6c757d;
+    }
+    .wa-toast.valid {
+      border-left-color: #28a745;
+    }
+    .wa-toast.invalid {
+      border-left-color: #dc3545;
+    }
+    .wa-toast-header {
+      padding: 10px 15px;
+      font-weight: bold;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background-color: #f8f9fa;
+    }
+    .wa-toast-body {
+      padding: 12px 15px;
+    }
+    .wa-toast-close {
+      background: none;
+      border: none;
+      font-size: 18px;
+      cursor: pointer;
+      opacity: 0.7;
+    }
+    .wa-toast-close:hover {
+      opacity: 1;
+    }
+    @keyframes waSlideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    .wa-status-indicator {
+      position: absolute;
+      left: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: white;
+      z-index: 5;
+    }
+  `);
+
+  /**************** Firebase Init ****************/
+  let app, db;
+  try {
+    if (!firebase.apps.length) {
+      app = firebase.initializeApp(FB);
+    } else {
+      app = firebase.app();
+    }
+    db = firebase.database(app);
+    console.log(LOGP, "Firebase initialized");
+  } catch (e) {
+    console.error(LOGP, "Firebase init error:", e);
+    return;
+  }
+
+  /**************** Utils ****************/
+  function normalizePhoneNumber(input) {
+    if (!input) return null;
+    let n = String(input).replace(/\D/g, "");
+    if (n.startsWith("6262")) n = n.replace(/^62+/, "62");
+    if (n.startsWith("0")) n = "62" + n.slice(1);
+    else if (n.startsWith("+62")) n = n.replace(/^\+/, "");
+    else if (n.startsWith("8")) n = "62" + n;
+    if (n.length < 9) return null;
+    return n;
+  }
+
+  function upperTrim(val) {
+    if (!val) return "";
+    return String(val).trim().toUpperCase();
+  }
+
+  // Cache sederhana untuk dokumen
+  let documentCache = null;
+  function getDocumentCache() {
+    if (!documentCache) {
+      documentCache = [document];
+      try {
+        document.querySelectorAll("iframe").forEach(iframe => {
+          if (iframe.contentDocument) documentCache.push(iframe.contentDocument);
+        });
+      } catch (e) {}
+    }
+    return documentCache;
+  }
+
+  function qsaAllDocs(selector) {
+    const result = [];
+    const docs = getDocumentCache();
+    for (const d of docs) {
+      try {
+        const elements = d.querySelectorAll(selector);
+        if (elements.length) {
+          result.push(...Array.from(elements));
+        }
+      } catch (e) {}
+    }
+    return result;
+  }
+
+  function showToast({ title, message, type = "info" }) {
+    let container = document.getElementById("wa-toast-container");
+    if (!container) {
+      container = document.createElement("div");
+      container.id = "wa-toast-container";
+      document.body.appendChild(container);
+    }
+
+    const toast = document.createElement("div");
+    toast.className = `wa-toast ${type}`;
+
+    const header = document.createElement("div");
+    header.className = "wa-toast-header";
+
+    const titleEl = document.createElement("div");
+    titleEl.textContent = title;
+
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "wa-toast-close";
+    closeBtn.innerHTML = "&times;";
+    closeBtn.addEventListener("click", () => {
+      toast.style.animation = "waSlideOut 0.3s ease-out forwards";
+      setTimeout(() => toast.remove(), 300);
+    });
+
+    header.appendChild(titleEl);
+    header.appendChild(closeBtn);
+
+    const body = document.createElement("div");
+    body.className = "wa-toast-body";
+    body.textContent = message;
+
+    toast.appendChild(header);
+    toast.appendChild(body);
+    container.appendChild(toast);
+
+    // Auto remove setelah delay
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.style.animation = "waSlideOut 0.3s ease-out forwards";
+        setTimeout(() => toast.remove(), 1200);
+      }
+    }, TOAST_AUTOHIDE_MS);
+
+    return toast;
+  }
+
+  function ensureIconBeforeInput(input, status) {
+    // Hapus indikator lama jika ada
+    const oldIndicator = input.parentNode.querySelector('.wa-status-indicator');
+    if (oldIndicator) oldIndicator.remove();
+
+    const indicator = document.createElement("span");
+    indicator.className = "wa-status-indicator";
+
+    switch(status) {
+      case 'pending':
+        indicator.textContent = '⏳';
+        indicator.style.backgroundColor = '#6c757d';
+        break;
+      case 'valid':
+        indicator.textContent = '✓';
+        indicator.style.backgroundColor = '#28a745';
+        break;
+      case 'invalid':
+        indicator.textContent = '!';
+        indicator.style.backgroundColor = '#dc3545';
+        break;
+      default:
+        indicator.textContent = '?';
+        indicator.style.backgroundColor = '#ffc107';
+    }
+
+    input.parentNode.style.position = 'relative';
+    input.style.paddingLeft = '30px';
+    input.parentNode.insertBefore(indicator, input);
+
+    return indicator;
+  }
+
+  /**************** Field Finders ****************/
+  // Selector yang lebih spesifik sesuai permintaan
+  function readFields() {
+    let phoneInput = null;
+    let plateInput = null;
+    let vinElement = null;
+
+    // Cari di semua dokumen (termasuk iframe)
+    const docs = getDocumentCache();
+    for (const d of docs) {
+      try {
+        if (!phoneInput) phoneInput = d.querySelector(SEL.phone);
+        if (!plateInput) plateInput = d.querySelector(SEL.plate);
+        if (!vinElement) vinElement = d.querySelector(SEL.vinText);
+      } catch (e) {}
+    }
+
+    return {
+      phone: phoneInput ? { el: phoneInput, value: phoneInput.value } : { el: null, value: null },
+      plate: plateInput ? { el: plateInput, value: plateInput.value } : { el: null, value: null },
+      vin: vinElement ? { el: vinElement, value: vinElement.textContent || vinElement.innerText } : { el: null, value: null }
+    };
+  }
+
+  /**************** RTDB Functions ****************/
+  let activePhone = null;
+  let detachFns = [];
+
+  function detachAll() {
+    detachFns.forEach(fn => fn());
+    detachFns = [];
+  }
+
+  function attachResultListeners(phone, ctx) {
+    detachAll(); // Hapus listener lama
+
+    const validRef = db.ref(PATH.valid).orderByChild("phone").equalTo(phone);
+    const onValid = validRef.on("child_added", (snap) => {
+      console.log(LOGP, "VALID hit:", snap.val());
+      renderStatus("valid", phone, ctx);
+      detachAll(); // Hentikan listener setelah hasil didapat
+    });
+
+    const invalidRef = db.ref(PATH.invalid).orderByChild("phone").equalTo(phone);
+    const onInvalid = invalidRef.on("child_added", (snap) => {
+      console.log(LOGP, "INVALID hit:", snap.val());
+      renderStatus("invalid", phone, ctx);
+      detachAll(); // Hentikan listener setelah hasil didapat
+    });
+
+    detachFns.push(() => validRef.off("child_added", onValid));
+    detachFns.push(() => invalidRef.off("child_added", onInvalid));
+
+    // Timeout untuk listener (15 detik)
+    const timeout = setTimeout(() => {
+      console.log(LOGP, "Listener timeout for phone:", phone);
+      detachAll();
+    }, 15000);
+
+    detachFns.push(() => clearTimeout(timeout));
+  }
+
+  function renderStatus(status, phone, { phoneEl, vin, plate }) {
+    // Update indicator
+    if (phoneEl) {
+      ensureIconBeforeInput(phoneEl, status);
+    }
+
+    // Show toast notification hanya untuk hasil valid/invalid
+    if (status === "valid" || status === "invalid") {
+      const title = status === "valid"
+        ? "WhatsApp TERVERIFIKASI"
+        : "WhatsApp TIDAK TERHUBUNG";
+
+      const message = status === "valid"
+        ? `Nomor ${phone} terverifikasi. Silakan lanjutkan proses.`
+        : `Nomor ${phone} tidak terhubung WhatsApp. Gunakan nomor lain.`;
+
+      showToast({
+        title,
+        message,
+        type: status
+      });
+    }
+  }
+
+  function pushPending({ phone, vin, plate }) {
+    const payload = {
+      phone,
+      policeNo: plate || "",
+      chassisNo: vin || "",
+      status: "pending",
+      source: "d365",
+      ts: Date.now()
+    };
+
+    db.ref(PATH.pending).push(payload)
+      .then(() => console.log(LOGP, "PUSH /pending:", payload))
+      .catch(err => console.error(LOGP, "RTDB push error:", err));
+  }
+
+  /**************** Main Scanner ****************/
+  let isScanning = false;
+  let lastSignature = "";
+
+  function scanAndProcess() {
+    if (isScanning) return;
+    isScanning = true;
+
+    try {
+      const { phone, plate, vin } = readFields();
+
+      if (!phone.el || !phone.value) {
+        isScanning = false;
+        return;
+      }
+
+      // Normalisasi data
+      const phoneNorm = normalizePhoneNumber(phone.value);
+      const plateNorm = upperTrim(plate.value);
+      const vinNorm = upperTrim(vin.value);
+
+      if (!phoneNorm) {
+        ensureIconBeforeInput(phone.el, 'unknown');
+        isScanning = false;
+        return;
+      }
+
+      const signature = `${phoneNorm}|${plateNorm}|${vinNorm}`;
+      const changed = signature !== lastSignature;
+
+      if (changed) {
+        lastSignature = signature;
+        console.log(LOGP, "Detected changes:", { phoneNorm, plateNorm, vinNorm });
+
+        // Set status indicator to processing
+        ensureIconBeforeInput(phone.el, 'pending');
+
+        // Detach old listeners if phone changed
+        if (activePhone !== phoneNorm) {
+          detachAll();
+          activePhone = phoneNorm;
+          attachResultListeners(activePhone, { phoneEl: phone.el, vin: vinNorm, plate: plateNorm });
+        }
+
+        // Push to pending
+        pushPending({ phone: phoneNorm, vin: vinNorm, plate: plateNorm });
+
+        // HAPUS NOTIFIKASI PROSES - tidak menampilkan toast saat proses
+      }
+    } catch (error) {
+      console.error(LOGP, "Error in scanAndProcess:", error);
+    } finally {
+      isScanning = false;
+    }
+  }
+
+  /**************** Optimized Scanning ****************/
+  let scanInterval = null;
+
+  function startScanner() {
+    if (scanInterval) clearInterval(scanInterval);
+    scanInterval = setInterval(scanAndProcess, RESCAN_MS);
+  }
+
+  // Mulai scanner setelah halaman dimuat
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startScanner);
+  } else {
+    startScanner();
+  }
+
+  console.log(LOGP, "Script ready. Menunggu field muncul...");
+})();
