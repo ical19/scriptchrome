@@ -1,0 +1,90 @@
+ const FB = {
+        apiKey: "AIzaSyCIFQPklgevLVnqsjeG3K5s6JuwZF76r8s",
+        authDomain: "tunas-tyt.firebaseapp.com",
+        databaseURL: "https://tunas-tyt-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "tunas-tyt",
+        storageBucket: "tunas-tyt.firebasestorage.app",
+        messagingSenderId: "1066204149365",
+        appId: "1:1066204149365:web:7d7ec14c437dec32236a3c",
+        measurementId: "G-MNCJ1V37ZP",
+    };
+    // ----------------------------
+
+    const FIREBASE_APP = 'https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js';
+    const FIREBASE_DB  = 'https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js';
+
+    function loadScript(src) {
+        return new Promise((resolve, reject) => {
+            if (document.querySelector(`script[src="${src}"]`)) {
+                return resolve();
+            }
+            const s = document.createElement('script');
+            s.src = src;
+            s.async = true;
+            s.onload = () => resolve();
+            s.onerror = () => reject(new Error('Failed to load ' + src));
+            document.head.appendChild(s);
+        });
+    }
+
+    async function ensureFirebase() {
+        if (window.firebase && window.firebase.apps && window.firebase.apps.length) {
+            return window.firebase;
+        }
+        await loadScript(FIREBASE_APP);
+        await loadScript(FIREBASE_DB);
+        if (!window.firebase) throw new Error('Firebase failed to load');
+        if (!window.firebase.apps || window.firebase.apps.length === 0) {
+            window.firebase.initializeApp(FB);
+        }
+        return window.firebase;
+    }
+
+    // Notifikasi sederhana (opsional)
+    function showMsg(text, timeout = 5000) {
+        const msg = document.createElement('div');
+        msg.style.cssText = `
+            position: fixed;
+            right: 16px;
+            bottom: 48px;
+            z-index: 999999;
+            min-width: 260px;
+            max-width: 360px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            background: rgba(0,0,0,0.75);
+            color: #fff;
+            font-size: 13px;
+        `;
+        msg.innerText = text;
+        document.body.appendChild(msg);
+        setTimeout(() => msg.remove(), timeout);
+    }
+
+    // Main logic → langsung jalan saat halaman load
+    (async function main() {
+        try {
+            const firebase = await ensureFirebase();
+
+            // buat data contoh
+            const ts = new Date().toISOString();
+            const path = `/tampermonkey_test/${location.hostname.replace(/\./g, '_')}/${Date.now()}`;
+            const payload = {
+                sourceUrl: location.href,
+                hostname: location.hostname,
+                timeISO: ts,
+                message: 'auto write dari Tampermonkey (on reload)',
+                userAgent: navigator.userAgent
+            };
+
+            // tulis ke RTDB
+            const dbRef = firebase.database().ref(path);
+            await dbRef.set(payload);
+
+            console.log('[RTDB AUTO] write success', { path, payload });
+            showMsg(`Write success → ${path}`);
+        } catch (err) {
+            console.error('[RTDB AUTO] error', err);
+            showMsg('Write failed: ' + (err && err.message ? err.message : String(err)));
+        }
+    })();
