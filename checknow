@@ -1,21 +1,4 @@
-    const FB = {
-        apiKey: "AIzaSyCIFQPklgevLVnqsjeG3K5s6JuwZF76r8s",
-        authDomain: "tunas-tyt.firebaseapp.com",
-        databaseURL: "https://tunas-tyt-default-rtdb.asia-southeast1.firebasedatabase.app",
-        projectId: "tunas-tyt",
-        storageBucket: "tunas-tyt.firebasestorage.app",
-        messagingSenderId: "1066204149365",
-        appId: "1:1066204149365:web:7d7ec14c437dec32236a3c",
-        measurementId: "G-MNCJ1V37ZP",
-    };
-
-    const PATH = {
-        pending: "pending",
-        valid: "valid",
-        invalid: "invalid",
-        test: "tampermonkey_test"
-    };
-
+ /********************* CONFIG *********************/
     const SEL = {
         phones: [
             "input[aria-label='Mobile Phone']",
@@ -34,13 +17,11 @@
         ]
     };
 
-
     // Opsi dropdown untuk status invalid
     const INVALID_OPTIONS = [
         "Privasi",
         "Pelanggan memberi nomor salah",
         "Rental (Tidak ada WA user)",
-        "Pake hp jadul",
         "Lainnya"
     ];
 
@@ -126,48 +107,6 @@
       color: white;
       z-index: 5;
     }
-    #firebase-status {
-      position: fixed;
-      bottom: 10px;
-      right: 10px;
-      padding: 5px 10px;
-      border-radius: 4px;
-      font-size: 12px;
-      z-index: 10000;
-      background: #f8f9fa;
-      border: 1px solid #dee2e6;
-    }
-    #firebase-status.connected {
-      background: #d4edda;
-      border-color: #c3e6cb;
-      color: #155724;
-    }
-    #firebase-status.disconnected {
-      background: #f8d7da;
-      border-color: #f5c6cb;
-      color: #721c24;
-    }
-    #firebase-status.connecting {
-      background: #fff3cd;
-      border-color: #ffeeba;
-      color: #856404;
-    }
-    #firebase-trigger-btn {
-      position: fixed;
-      bottom: 40px;
-      right: 10px;
-      padding: 5px 10px;
-      border-radius: 4px;
-      font-size: 12px;
-      z-index: 10000;
-      background: #007bff;
-      color: white;
-      border: none;
-      cursor: pointer;
-    }
-    #firebase-trigger-btn:hover {
-      background: #0069d9;
-    }
     #invalid-reason-modal {
       position: fixed;
       top: 50%;
@@ -219,165 +158,6 @@
       margin-top: 5px;
     }
   `);
-
-    /**************** Firebase Init ****************/
-    let db = null;
-    let firebaseInitialized = false;
-    let firebaseInitAttempts = 0;
-    const MAX_INIT_ATTEMPTS = Infinity;
-    let connectionListener = null;
-
-    function initFirebase() {
-        try {
-            if (firebaseInitialized) return true;
-
-            firebaseInitAttempts++;
-
-            if (firebaseInitAttempts > 20) {
-                console.warn(LOGP, "Banyak percobaan inisialisasi, jeda sebentar...");
-                setTimeout(initFirebase, 10000);
-                return false;
-            }
-
-            if (typeof firebase === "undefined") {
-                console.log(LOGP, "Firebase belum tersedia, mencoba lagi dalam 2 detik...");
-                setTimeout(initFirebase, 2000);
-                return false;
-            }
-
-            if (!firebase.apps.length) {
-                console.log(LOGP, "Menginisialisasi Firebase...");
-                firebase.initializeApp(FB);
-            }
-
-            db = firebase.database();
-            updateFirebaseStatus(false, "Sedang menghubungkan...");
-
-            testFirebaseConnection();
-
-            return true;
-        } catch (e) {
-            console.error(LOGP, "Firebase init error:", e);
-            updateFirebaseStatus(false, "Error: " + e.message);
-            setTimeout(initFirebase, 3000);
-            return false;
-        }
-    }
-
-    function testFirebaseConnection() {
-        if (!db) {
-            console.error(LOGP, "DB belum siap untuk test connection");
-            return;
-        }
-
-        console.log(LOGP, "Testing Firebase connection dengan .info/connected listener...");
-
-        if (connectionListener) {
-            db.ref(".info/connected").off("value", connectionListener);
-        }
-
-        connectionListener = db.ref(".info/connected").on("value", (snap) => {
-            if (snap.val() === true) {
-                console.log(LOGP, "Firebase connected (via .info/connected)");
-                firebaseInitialized = true;
-                updateFirebaseStatus(true, "Terhubung");
-                hideFirebaseTriggerButton();
-
-                testFirebaseWrite();
-            } else {
-                console.log(LOGP, "Firebase disconnected");
-                firebaseInitialized = false;
-                updateFirebaseStatus(false, "Terputus");
-            }
-        }, (error) => {
-            console.error(LOGP, "Error in connection listener:", error);
-            firebaseInitialized = false;
-            updateFirebaseStatus(false, "Error: " + error.message);
-        });
-
-        keepFirebaseSynced();
-    }
-
-    function testFirebaseWrite() {
-        if (!db || !firebaseInitialized) return;
-
-        const ts = new Date().toISOString();
-        const path = `${PATH.test}/${location.hostname.replace(/\./g, '_')}/${Date.now()}`;
-        const payload = {
-            sourceUrl: location.href,
-            hostname: location.hostname,
-            timeISO: ts,
-            message: 'Connection test dari D365 WA Checker',
-            userAgent: navigator.userAgent,
-            type: 'connection_test'
-        };
-
-        db.ref(path).set(payload)
-            .then(() => {
-            console.log(LOGP, "Firebase test write success");
-        })
-            .catch(err => {
-            console.error(LOGP, "Firebase test write error:", err);
-        });
-    }
-
-    function keepFirebaseSynced() {
-        if (!db) return;
-
-        try {
-            db.ref(PATH.pending).keepSynced(true);
-            db.ref(PATH.valid).keepSynced(true);
-            db.ref(PATH.invalid).keepSynced(true);
-            console.log(LOGP, "Firebase keepSynced enabled untuk path utama");
-        } catch (e) {
-            console.warn(LOGP, "Tidak dapat mengaktifkan keepSynced:", e);
-        }
-    }
-
-    function updateFirebaseStatus(connected, message) {
-        let statusEl = document.getElementById("firebase-status");
-        if (!statusEl) {
-            statusEl = document.createElement("div");
-            statusEl.id = "firebase-status";
-            document.body.appendChild(statusEl);
-        }
-
-        statusEl.textContent = "-> " + message;
-        statusEl.className = connected ? "connected" : (message.includes("menghubungkan") ? "connecting" : "disconnected");
-    }
-
-    function showFirebaseTriggerButton() {
-        let btn = document.getElementById("firebase-trigger-btn");
-        if (!btn) {
-            btn = document.createElement("button");
-            btn.id = "firebase-trigger-btn";
-            btn.textContent = "Trigger Firebase Connection";
-            btn.addEventListener("click", triggerFirebaseConnection);
-            document.body.appendChild(btn);
-        }
-        btn.style.display = "block";
-    }
-
-    function hideFirebaseTriggerButton() {
-        const btn = document.getElementById("firebase-trigger-btn");
-        if (btn) {
-            btn.style.display = "none";
-        }
-    }
-
-    function triggerFirebaseConnection() {
-        console.log(LOGP, "Manual Firebase trigger initiated");
-        firebaseInitAttempts = 0;
-        firebaseInitialized = false;
-        updateFirebaseStatus(false, "Manual trigger...");
-
-        if (connectionListener && db) {
-            db.ref(".info/connected").off("value", connectionListener);
-            connectionListener = null;
-        }
-
-        initFirebase();
-    }
 
     /**************** Invalid Reason Modal ****************/
     function showInvalidReasonModal(phone, ctx, val) {
@@ -605,18 +385,6 @@
         });
     }
 
-    // CSS tambahan untuk styling lebih baik (tambahkan ke stylesheet Anda)
-    /*
-.elegant-dropdown {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-}
-
-.elegant-dropdown option {
-    padding: 8px 12px;
-    font-size: 13px;
-}
-*/
-
     /**************** Utils ****************/
     function sendToSheet(data) {
         const url = "https://script.google.com/macros/s/AKfycbyE3MchIf8jjq1lRcw1GDjxN3m5Sl3qdwnEQFhAJ7ock_4smQ9F54V-SP2yIoc2_FzWpw/exec";
@@ -660,7 +428,7 @@
         return cleaned;
     }
 
-    function formatPhoneForRTDB(phone) {
+    function formatPhoneForAPI(phone) {
         if (!phone) return null;
         let cleaned = phone.replace(/\D/g, "");
 
@@ -823,101 +591,68 @@
         };
     }
 
-    /**************** RTDB Functions ****************/
+    /**************** WhatsApp Check Functions ****************/
     let activePhone = null;
-    let detachFns = [];
     let handledPhones = new Map();
 
-    function detachAll() {
-        try {
-            detachFns.forEach(fn => {
-                try { fn(); } catch (e) { console.warn(LOGP, "detach fn error:", e); }
-            });
-        } catch (e) {
-            console.warn(LOGP, "detachAll error:", e);
-        }
-        detachFns = [];
-        handledPhones.clear();
-    }
+    function checkWhatsAppNumber(phone, ctx) {
+        if (handledPhones.get(phone)) return;
 
-    function attachResultListeners(phone, ctx) {
-        if (!db || !firebaseInitialized) {
-            console.error(LOGP, "DB belum siap, tidak dapat melampirkan listener");
-            return;
-        }
+        handledPhones.set(phone, true);
+        ensureIconBeforeInput(ctx.phoneEl, 'pending');
 
-        detachAll();
-        handledPhones.set(phone, false);
+        const apiUrl = `https://waclient.com/whatsapp-number-checker?number=${phone}`;
 
-        const validQuery = db.ref(PATH.valid).orderByChild("phone").equalTo(phone).limitToFirst(1);
-        const invalidQuery = db.ref(PATH.invalid).orderByChild("phone").equalTo(phone).limitToFirst(1);
+        GM_xmlhttpRequest({
+            method: "GET",
+            url: apiUrl,
+            onload: function(response) {
+                try {
+                    const result = JSON.parse(response.responseText);
 
-        const onValid = (snap) => {
-            try {
-                const val = snap.val();
-                console.log(LOGP, "VALID hit:", val);
+                    if (result.status === "success") {
+                        // Valid WhatsApp number
+                        renderStatus("valid", phone, ctx);
+                        sendToSheet({
+                            policeRegNo: ctx.plate || "",
+                            equipmentNo: ctx.vin || "",
+                            contactPersonPhone: phone || "",
+                            serviceAdvisor: ctx.serviceAdvisor || "",
+                            typeKendaraan: ctx.typeKendaraan || "",
+                            contactPerson: ctx.contactPerson || "",
+                            statusWA: "valid",
+                        });
+                    } else if (result.status === "error") {
+                        // Invalid WhatsApp number
+                        renderStatus("invalid", phone, ctx);
 
-                // Untuk valid, langsung kirim ke sheet dan enable buttons
-                sendToSheet({
-                    policeRegNo: val.policeNo || "",
-                    equipmentNo: val.chassisNo || "",
-                    contactPersonPhone: phone || "",
-                    serviceAdvisor: ctx.serviceAdvisor || "",
-                    typeKendaraan: ctx.typeKendaraan || "",
-                    contactPerson: ctx.contactPerson || "",
-                    statusWA: "valid",
-                });
+                        // Disable buttons sampai user memilih alasan
+                        document.querySelector('[data-id="quickCreateSaveAndCloseBtn"]').disabled = true;
+                        document.querySelectorAll('.fui-SplitButton button').forEach(btn => btn.disabled = true);
 
-                if (handledPhones.get(phone)) return;
-                handledPhones.set(phone, true);
-
-                renderStatus("valid", phone, ctx);
-                document.querySelector('[data-id="quickCreateSaveAndCloseBtn"]').disabled = false;
-                document.querySelectorAll('.fui-SplitButton button').forEach(btn => btn.disabled = false);
-
-                detachAll();
-            } catch (e) {
-                console.error(LOGP, "onValid error:", e);
+                        // Tampilkan dropdown di sebelah Save & Close
+                        renderInvalidDropdown(phone, ctx, {
+                            policeNo: ctx.plate,
+                            chassisNo: ctx.vin
+                        });
+                    } else {
+                        // Unknown response
+                        console.error(LOGP, "Unknown API response:", result);
+                        ensureIconBeforeInput(ctx.phoneEl, 'unknown');
+                        handledPhones.set(phone, false);
+                    }
+                } catch (e) {
+                    console.error(LOGP, "Error parsing API response:", e);
+                    ensureIconBeforeInput(ctx.phoneEl, 'unknown');
+                    handledPhones.set(phone, false);
+                }
+            },
+            onerror: function(err) {
+                console.error(LOGP, "API request error:", err);
+                ensureIconBeforeInput(ctx.phoneEl, 'unknown');
+                handledPhones.set(phone, false);
             }
-        };
-
-        const onInvalid = (snap) => {
-            try {
-                const val = snap.val();
-                console.log(LOGP, "INVALID hit:", val);
-
-                if (handledPhones.get(phone)) return;
-                handledPhones.set(phone, true);
-
-                renderStatus("invalid", phone, ctx);
-
-                // Disable buttons sampai user memilih alasan
-                document.querySelector('[data-id="quickCreateSaveAndCloseBtn"]').disabled = true;
-                document.querySelectorAll('.fui-SplitButton button').forEach(btn => btn.disabled = true);
-
-                // Tampilkan modal untuk memilih alasan invalid
-                //showInvalidReasonModal(phone, ctx, val);
-                // Tampilkan dropdown di sebelah Save & Close
-                renderInvalidDropdown(phone, ctx, val);
-
-
-                detachAll();
-            } catch (e) {
-                console.error(LOGP, "onInvalid error:", e);
-            }
-        };
-
-        validQuery.on("child_added", onValid);
-        invalidQuery.on("child_added", onInvalid);
-
-        detachFns.push(() => { try { validQuery.off("child_added", onValid); } catch (e) {} });
-        detachFns.push(() => { try { invalidQuery.off("child_added", onInvalid); } catch (e) {} });
-
-        const timeout = setTimeout(() => {
-            console.log(LOGP, "Listener timeout for phone:", phone);
-            detachAll();
-        }, 15000);
-        detachFns.push(() => clearTimeout(timeout));
+        });
     }
 
     function renderStatus(status, phone, { phoneEl, vin, plate }) {
@@ -927,11 +662,11 @@
 
         if (status === "valid" || status === "invalid") {
             const title = status === "valid"
-            ? "WhatsApp TERVERIFIKASI"
-            : "bukan nomor WhatsApp!";
+                ? "WhatsApp TERVERIFIKASI"
+                : "bukan nomor WhatsApp!";
 
             const message = status === "valid"
-            ? `Nomor ${phone} terverifikasi. Silakan lanjutkan proses.`
+                ? `Nomor ${phone} terverifikasi. Silakan lanjutkan proses.`
                 : `Nomor ${phone} tidak terhubung WhatsApp. Silakan pilih alasan.`;
 
             showToast({
@@ -942,46 +677,12 @@
         }
     }
 
-    function pushPending({ phone, vin, plate, serviceAdvisor, typeKendaraan, contactPerson }) {
-        if (!db || !firebaseInitialized) {
-            console.error(LOGP, "DB belum siap, skip pushPending");
-            return;
-        }
-
-        const payload = {
-            phone,
-            policeNo: plate || "",
-            chassisNo: vin || "",
-            serviceAdvisor: serviceAdvisor || "",
-            typeKendaraan: typeKendaraan || "",
-            contactPerson: contactPerson || "",
-            status: "pending",
-            source: "d365",
-            ts: Date.now()
-        };
-
-        db.ref(PATH.pending).push(payload)
-            .then(() => console.log(LOGP, "PUSH /pending:", payload))
-            .catch(err => {
-            console.error(LOGP, "RTDB push error:", err);
-            if (err.code === 'NETWORK_ERROR') {
-                firebaseInitialized = false;
-                initFirebase();
-            }
-        });
-    }
-
     /**************** Main Scanner ****************/
     let isScanning = false;
     let lastSignature = "";
 
     function scanAndProcess() {
-        if (isScanning || !firebaseInitialized) {
-            if (!firebaseInitialized) {
-                console.log(LOGP, "Menunggu koneksi Firebase...");
-            }
-            return;
-        }
+        if (isScanning) return;
         isScanning = true;
 
         try {
@@ -998,38 +699,26 @@
             phones.forEach(({ el, value }) => {
                 if (!el || !value) return;
 
-                const phoneRTDBFormatted = formatPhoneForRTDB(value);
-                if (!phoneRTDBFormatted) {
+                const phoneAPIFormatted = formatPhoneForAPI(value);
+                if (!phoneAPIFormatted) {
                     ensureIconBeforeInput(el, 'unknown');
                     return;
                 }
 
-                const signature = `${phoneRTDBFormatted}|${plateNorm}|${vinNorm}`;
+                const signature = `${phoneAPIFormatted}|${plateNorm}|${vinNorm}`;
                 const changed = signature !== lastSignature;
 
                 if (changed) {
-                    console.log(LOGP, lastSignature + " ini last signature");
-                    console.log(LOGP, signature + " ini signature");
+                    console.log(LOGP, "Detected changes:", { phoneAPIFormatted, plateNorm, vinNorm });
                     lastSignature = signature;
-                    console.log(LOGP, "Detected changes:", { phoneRTDBFormatted, plateNorm, vinNorm });
 
-                    ensureIconBeforeInput(el, 'pending');
-
-                    if (activePhone !== phoneRTDBFormatted) {
-                        detachAll();
-                        activePhone = phoneRTDBFormatted;
-                        attachResultListeners(activePhone, {
-                            phoneEl: el,
-                            vin: vinNorm,
-                            plate: plateNorm,
-                            serviceAdvisor,
-                            typeKendaraan,
-                            contactPerson
-                        });
+                    if (activePhone !== phoneAPIFormatted) {
+                        activePhone = phoneAPIFormatted;
+                        handledPhones.clear();
                     }
 
-                    pushPending({
-                        phone: phoneRTDBFormatted,
+                    checkWhatsAppNumber(phoneAPIFormatted, {
+                        phoneEl: el,
                         vin: vinNorm,
                         plate: plateNorm,
                         serviceAdvisor,
@@ -1045,20 +734,13 @@
         }
     }
 
-    /**************** Optimized Scanning ****************/
+    /**************** Start Scanner ****************/
     let scanInterval = null;
 
     function startScanner() {
-        initFirebase();
-
-        const checkFirebaseReady = setInterval(() => {
-            if (firebaseInitialized) {
-                clearInterval(checkFirebaseReady);
-                if (scanInterval) clearInterval(scanInterval);
-                scanInterval = setInterval(scanAndProcess, RESCAN_MS);
-                console.log(LOGP, "Scanner started. Firebase ready.");
-            }
-        }, 1000);
+        if (scanInterval) clearInterval(scanInterval);
+        scanInterval = setInterval(scanAndProcess, RESCAN_MS);
+        console.log(LOGP, "Scanner started.");
     }
 
     if (document.readyState === 'loading') {
