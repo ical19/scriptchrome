@@ -1,44 +1,42 @@
- /********************* CONFIG *********************/
-    const SEL = {
-        phones: [
-            "input[aria-label='Mobile Phone']",
-            "input[data-id='mobilephone.fieldControl-phone-text-input']"
-        ],
-        plate: "input[aria-label='Plate No.']",
-        vinText: "[data-id$='selected_tag_text'][data-id*='vehicleidentificationid']",
-        serviceAdvisor: 'div[data-id="xts_serviceadvisorid.fieldControl-LookupResultsDropdown_xts_serviceadvisorid_selected_tag_text"]',
-        typeKendaraan: 'div[data-id="xts_productsegment1id.fieldControl-LookupResultsDropdown_xts_productsegment1id_selected_tag_text"]',
+  /********************* CONFIG *********************/
+  const FB = {
+    apiKey: "AIzaSyCIFQPklgevLVnqsjeG3K5s6JuwZF76r8s",
+    authDomain: "tunas-tyt.firebaseapp.com",
+    databaseURL: "https://tunas-tyt-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "tunas-tyt",
+    storageBucket: "tunas-tyt.firebasestorage.app",
+    messagingSenderId: "1066204149365",
+    appId: "1:1066204149365:web:7d7ec14c437dec32236a3c",
+    measurementId: "G-MNCJ1V37ZP",
+  };
 
-        // contactPerson → bisa lookup (div) atau text input (First Name)
-        contactPerson: [
-            'div[data-id="xts_contactpersonid.fieldControl-LookupResultsDropdown_xts_contactpersonid_selected_tag_text"]',
-            'input[data-id="firstname.fieldControl-text-box-text"]',
-            'input[aria-label="First Name"]'
-        ]
-    };
+  const PATH = {
+    pending: "pending",
+    valid: "valid",
+    invalid: "invalid",
+  };
 
-    // Opsi dropdown untuk status invalid
-    const INVALID_OPTIONS = [
-        "Privasi",
-        "Pelanggan memberi nomor salah",
-        "Rental (Tidak ada WA user)",
-        "Lainnya"
-    ];
+  const SEL = {
+    phone:  "input[aria-label='Mobile Phone']",
+    plate:  "input[aria-label='Plate No.']",
+    // elemen teks VIN (nomor rangka) ada pada data-id yang berakhiran selected_tag_text dan mengandung vehicleidentificationid
+    vinText: "[data-id$='selected_tag_text'][data-id*='vehicleidentificationid']"
+  };
 
-    const TOAST_AUTOHIDE_MS = 5000;
-    const RESCAN_MS = 2000;
-    const LOGP = "[WA-CHECK]";
+  const TOAST_AUTOHIDE_MS = 5000;
+  const RESCAN_MS = 2000; // Kurangi frekuensi scanning
+  const LOGP = "[WA-CHECK]";
 
-    /**************** Style Minimalis ****************/
-    const addStyle = (css) => {
-        try { GM_addStyle(css); } catch (_) {
-            const s = document.createElement("style");
-            s.textContent = css;
-            document.head.appendChild(s);
-        }
-    };
+  /**************** Style Minimalis ****************/
+  const addStyle = (css) => {
+    try { GM_addStyle(css); } catch (_) {
+      const s = document.createElement("style");
+      s.textContent = css;
+      document.head.appendChild(s);
+    }
+  };
 
-    addStyle(`
+  addStyle(`
     #wa-toast-container {
       position: fixed;
       top: 12px;
@@ -107,646 +105,318 @@
       color: white;
       z-index: 5;
     }
-    #invalid-reason-modal {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: white;
-      padding: 20px;
-      border-radius: 8px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-      z-index: 10001;
-      min-width: 350px;
-    }
-    #invalid-reason-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0,0,0,0.5);
-      z-index: 10000;
-    }
-    #invalid-reason-select {
-      width: 100%;
-      padding: 10px;
-      margin: 10px 0;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      font-size: 16px;
-    }
-    #invalid-reason-submit {
-      background: #007bff;
-      color: white;
-      border: none;
-      padding: 10px 15px;
-      border-radius: 4px;
-      cursor: pointer;
-      width: 100%;
-    }
-    #invalid-reason-submit:hover {
-      background: #0069d9;
-    }
-    #invalid-reason-submit:disabled {
-      background: #6c757d;
-      cursor: not-allowed;
-    }
-    .invalid-reason-error {
-      color: #dc3545;
-      font-size: 12px;
-      margin-top: 5px;
-    }
   `);
 
-    /**************** Invalid Reason Modal ****************/
-    function showInvalidReasonModal(phone, ctx, val) {
-        // Create overlay
-        const overlay = document.createElement("div");
-        overlay.id = "invalid-reason-overlay";
-        document.body.appendChild(overlay);
-
-        // Create modal
-        const modal = document.createElement("div");
-        modal.id = "invalid-reason-modal";
-
-        const title = document.createElement("h3");
-        title.textContent = "Alasan Invalid WhatsApp";
-        title.style.marginTop = "0";
-
-        const instruction = document.createElement("p");
-        instruction.textContent = `Pilih alasan untuk nomor ${phone}:`;
-        instruction.style.marginBottom = "10px";
-
-        const select = document.createElement("select");
-        select.id = "invalid-reason-select";
-
-        // Add default option
-        const defaultOption = document.createElement("option");
-        defaultOption.value = "";
-        defaultOption.textContent = "-- Pilih alasan --";
-        defaultOption.disabled = true;
-        defaultOption.selected = true;
-        select.appendChild(defaultOption);
-
-        // Add options from INVALID_OPTIONS
-        INVALID_OPTIONS.forEach(option => {
-            const optElement = document.createElement("option");
-            optElement.value = option;
-            optElement.textContent = option;
-            select.appendChild(optElement);
-        });
-
-        const error = document.createElement("div");
-        error.className = "invalid-reason-error";
-        error.style.display = "none";
-        error.textContent = "Silakan pilih alasan";
-
-        const submitBtn = document.createElement("button");
-        submitBtn.id = "invalid-reason-submit";
-        submitBtn.textContent = "Simpan";
-        submitBtn.disabled = true;
-
-        // Event listeners
-        select.addEventListener("change", function() {
-            const isValid = this.value !== "";
-            submitBtn.disabled = !isValid;
-            error.style.display = isValid ? "none" : "block";
-        });
-
-        submitBtn.addEventListener("click", function() {
-            if (select.value !== "") {
-                // Send to sheet dengan alasan yang dipilih
-                sendToSheet({
-                    policeRegNo: val.policeNo || "",
-                    equipmentNo: val.chassisNo || "",
-                    contactPersonPhone: phone || "",
-                    serviceAdvisor: ctx.serviceAdvisor || "",
-                    typeKendaraan: ctx.typeKendaraan || "",
-                    contactPerson: ctx.contactPerson || "",
-                    statusWA: "invalid",
-                    invalidReason: select.value
-                });
-
-                // Enable buttons
-                document.querySelector('[data-id="quickCreateSaveAndCloseBtn"]').disabled = false;
-                document.querySelectorAll('.fui-SplitButton button').forEach(btn => btn.disabled = false);
-
-                // Remove modal and overlay
-                document.body.removeChild(modal);
-                document.body.removeChild(overlay);
-
-                // Show success message
-                showToast({
-                    title: "Data Invalid Tersimpan",
-                    message: `Data telah dikirim dengan alasan: ${select.value}`,
-                    type: "info"
-                });
-            }
-        });
-
-        // Append elements to modal
-        modal.appendChild(title);
-        modal.appendChild(instruction);
-        modal.appendChild(select);
-        modal.appendChild(error);
-        modal.appendChild(submitBtn);
-
-        document.body.appendChild(modal);
-
-        // Focus on select
-        setTimeout(() => select.focus(), 100);
-    }
-
-    function renderInvalidDropdown(phone, ctx, val) {
-        const saveBtn = document.querySelector('[data-id="quickCreateSaveAndCloseBtn"]');
-        if (!saveBtn) {
-            console.warn(LOGP, "Save and Close button tidak ditemukan");
-            return;
-        }
-
-        // Jika dropdown sudah ada, hapus dulu
-        const oldDropdown = document.getElementById("invalid-reason-dropdown");
-        if (oldDropdown) oldDropdown.remove();
-
-        // Buat container untuk dropdown
-        const dropdownContainer = document.createElement("div");
-        dropdownContainer.id = "invalid-reason-container";
-        dropdownContainer.style.display = "inline-flex";
-        dropdownContainer.style.alignItems = "center";
-        dropdownContainer.style.marginRight = "8px";
-        dropdownContainer.style.position = "relative";
-
-        // Buat dropdown
-        const select = document.createElement("select");
-        select.id = "invalid-reason-dropdown";
-        select.className = "elegant-dropdown"; // Untuk styling CSS tambahan
-
-        // Style untuk dropdown
-        select.style.padding = "6px 28px 6px 10px"; // Ruang untuk ikon panah
-        select.style.border = "1px solid #d1d5db";
-        select.style.borderRadius = "4px";
-        select.style.fontSize = "13px";
-        select.style.lineHeight = "1.4";
-        select.style.backgroundColor = "#ffffff";
-        select.style.color = "#374151";
-        select.style.cursor = "pointer";
-        select.style.appearance = "none"; // Hilangkan style default browser
-        select.style.transition = "all 0.2s ease";
-        select.style.minWidth = "180px";
-        select.style.maxWidth = "220px";
-        select.style.boxShadow = "0 1px 2px rgba(0, 0, 0, 0.05)";
-
-        // Hover effect
-        select.addEventListener("mouseenter", () => {
-            select.style.borderColor = "#9ca3af";
-            select.style.boxShadow = "0 1px 3px rgba(0, 0, 0, 0.1)";
-        });
-
-        select.addEventListener("mouseleave", () => {
-            select.style.borderColor = "#d1d5db";
-            select.style.boxShadow = "0 1px 2px rgba(0, 0, 0, 0.05)";
-        });
-
-        // Focus effect
-        select.addEventListener("focus", () => {
-            select.style.borderColor = "#3b82f6";
-            select.style.boxShadow = "0 0 0 3px rgba(59, 130, 246, 0.15)";
-            select.style.outline = "none";
-        });
-
-        select.addEventListener("blur", () => {
-            select.style.borderColor = "#d1d5db";
-            select.style.boxShadow = "0 1px 2px rgba(0, 0, 0, 0.05)";
-        });
-
-        // Default option
-        const defaultOption = document.createElement("option");
-        defaultOption.value = "";
-        defaultOption.textContent = "Pilih alasan invalid";
-        defaultOption.disabled = true;
-        defaultOption.selected = true;
-        select.appendChild(defaultOption);
-
-        // Tambah opsi
-        INVALID_OPTIONS.forEach(opt => {
-            const o = document.createElement("option");
-            o.value = opt;
-            o.textContent = opt;
-            select.appendChild(o);
-        });
-
-        // Buat custom arrow untuk dropdown
-        const customArrow = document.createElement("div");
-        customArrow.innerHTML = "▼";
-        customArrow.style.position = "absolute";
-        customArrow.style.right = "8px";
-        customArrow.style.top = "50%";
-        customArrow.style.transform = "translateY(-50%)";
-        customArrow.style.pointerEvents = "none";
-        customArrow.style.fontSize = "10px";
-        customArrow.style.color = "#6b7280";
-
-        dropdownContainer.appendChild(select);
-        dropdownContainer.appendChild(customArrow);
-
-        // Sisipkan sebelum Save and Close
-        saveBtn.parentNode.insertBefore(dropdownContainer, saveBtn);
-
-        // Saat memilih alasan
-        select.addEventListener("change", () => {
-            if (select.value !== "") {
-                // Kirim ke Sheet
-                sendToSheet({
-                    policeRegNo: val.policeNo || "",
-                    equipmentNo: val.chassisNo || "",
-                    contactPersonPhone: phone || "",
-                    serviceAdvisor: ctx.serviceAdvisor || "",
-                    typeKendaraan: ctx.typeKendaraan || "",
-                    contactPerson: ctx.contactPerson || "",
-                    statusWA: "invalid",
-                    invalidReason: select.value
-                });
-
-                // Enable tombol Save and Close
-                document.querySelector('[data-id="quickCreateSaveAndCloseBtn"]').disabled = false;
-                document.querySelectorAll('.fui-SplitButton button').forEach(btn => btn.disabled = false);
-
-                // Optional: hapus dropdown setelah submit
-                // select.remove();
-
-                // Notifikasi
-                showToast({
-                    title: "Data Invalid Tersimpan",
-                    message: `Data telah dikirim dengan alasan: ${select.value}`,
-                    type: "info"
-                });
-            }
-        });
-    }
-
-    /**************** Utils ****************/
-    function sendToSheet(data) {
-        const url = "https://script.google.com/macros/s/AKfycbyE3MchIf8jjq1lRcw1GDjxN3m5Sl3qdwnEQFhAJ7ock_4smQ9F54V-SP2yIoc2_FzWpw/exec";
-
-        GM_xmlhttpRequest({
-            method: "POST",
-            url: url,
-            headers: {
-                "Content-Type": "application/json"
-            },
-            data: JSON.stringify(data),
-            onload: function (response) {
-                console.log("[Sheet] Response:", response.responseText);
-            },
-            onerror: function (err) {
-                console.error("[Sheet] Error:", err);
-            }
-        });
-    }
-
-    function formatPhoneForInput(phone) {
-        if (!phone) return "";
-
-        let cleaned = phone.replace(/\D/g, "");
-        if (!cleaned) return phone;
-
-        if (cleaned.startsWith("62")) {
-            cleaned = "0" + cleaned.substring(2);
-        }
-        else if (cleaned.startsWith("+62")) {
-            cleaned = "0" + cleaned.substring(3);
-        }
-        else if (cleaned.startsWith("8")) {
-            cleaned = "0" + cleaned;
-        }
-
-        if (cleaned.length > 13) {
-            cleaned = cleaned.substring(0, 13);
-        }
-
-        return cleaned;
-    }
-
-    function formatPhoneForAPI(phone) {
-        if (!phone) return null;
-        let cleaned = phone.replace(/\D/g, "");
-
-        if (cleaned.startsWith("0")) {
-            cleaned = "62" + cleaned.substring(1);
-        }
-        else if (cleaned.startsWith("+62")) {
-            cleaned = cleaned.substring(1);
-        }
-        else if (cleaned.startsWith("8")) {
-            cleaned = "62" + cleaned;
-        }
-
-        if (cleaned.length < 9) return null;
-        return cleaned;
-    }
-
-    function upperTrim(val) {
-        if (!val) return "";
-        return String(val).trim().toUpperCase();
-    }
-
-    let documentCache = null;
-    function getDocumentCache() {
-        if (!documentCache) {
-            documentCache = [document];
-            try {
-                document.querySelectorAll("iframe").forEach(iframe => {
-                    if (iframe.contentDocument) documentCache.push(iframe.contentDocument);
-                });
-            } catch (e) {}
-        }
-        return documentCache;
-    }
-
-    function showToast({ title, message, type = "info" }) {
-        let container = document.getElementById("wa-toast-container");
-        if (!container) {
-            container = document.createElement("div");
-            container.id = "wa-toast-container";
-            document.body.appendChild(container);
-        }
-
-        const toast = document.createElement("div");
-        toast.className = `wa-toast ${type}`;
-
-        const header = document.createElement("div");
-        header.className = "wa-toast-header";
-
-        const titleEl = document.createElement("div");
-        titleEl.textContent = title;
-
-        const closeBtn = document.createElement("button");
-        closeBtn.className = "wa-toast-close";
-        closeBtn.innerHTML = "&times;";
-        closeBtn.addEventListener("click", () => {
-            toast.style.animation = "waSlideOut 0.3s ease-out forwards";
-            setTimeout(() => toast.remove(), 300);
-        });
-
-        header.appendChild(titleEl);
-        header.appendChild(closeBtn);
-
-        const body = document.createElement("div");
-        body.className = "wa-toast-body";
-        body.textContent = message;
-
-        toast.appendChild(header);
-        toast.appendChild(body);
-        container.appendChild(toast);
-
-        setTimeout(() => {
-            if (toast.parentNode) {
-                toast.style.animation = "waSlideOut 0.3s ease-out forwards";
-                setTimeout(() => toast.remove(), 300);
-            }
-        }, TOAST_AUTOHIDE_MS);
-
-        return toast;
-    }
-
-    function ensureIconBeforeInput(input, status) {
-        const oldIndicator = input.parentNode.querySelector('.wa-status-indicator');
-        if (oldIndicator) oldIndicator.remove();
-
-        const indicator = document.createElement("span");
-        indicator.className = "wa-status-indicator";
-
-        switch(status) {
-            case 'pending':
-                indicator.textContent = '⏳';
-                indicator.style.backgroundColor = '#6c757d';
-                break;
-            case 'valid':
-                indicator.textContent = '✓';
-                indicator.style.backgroundColor = '#28a745';
-                break;
-            case 'invalid':
-                indicator.textContent = '!';
-                indicator.style.backgroundColor = '#dc3545';
-                break;
-            default:
-                indicator.textContent = '?';
-                indicator.style.backgroundColor = '#ffc107';
-        }
-
-        input.parentNode.style.position = 'relative';
-        input.style.paddingLeft = '30px';
-        input.parentNode.insertBefore(indicator, input);
-
-        return indicator;
-    }
-
-    /**************** Field Finders ****************/
-    function readFields() {
-        const phones = [];
-        let plateInput = null;
-        let vinElement = null;
-        let serviceAdvisorEl = null;
-        let typeKendaraanEl = null;
-        let contactPersonVal = "";
-
-        const docs = getDocumentCache();
-        for (const d of docs) {
-            try {
-                for (const sel of SEL.phones) {
-                    const els = d.querySelectorAll(sel);
-                    els.forEach(el => {
-                        phones.push({ el, value: el.value });
-                    });
-                }
-
-                if (!plateInput) plateInput = d.querySelector(SEL.plate);
-                if (!vinElement) vinElement = d.querySelector(SEL.vinText);
-                if (!serviceAdvisorEl) serviceAdvisorEl = d.querySelector(SEL.serviceAdvisor);
-                if (!typeKendaraanEl) typeKendaraanEl = d.querySelector(SEL.typeKendaraan);
-
-                // ambil contact person (cek semua selector)
-                if (!contactPersonVal) {
-                    for (const sel of SEL.contactPerson) {
-                        const el = d.querySelector(sel);
-                        if (el) {
-                            contactPersonVal = el.value || el.innerText || "";
-                            contactPersonVal = contactPersonVal.trim();
-                            if (contactPersonVal) break;
-                        }
-                    }
-                }
-
-            } catch (e) {}
-        }
-
-        return {
-            phones,
-            plate: plateInput ? { el: plateInput, value: plateInput.value } : { el: null, value: null },
-            vin: vinElement ? { el: vinElement, value: vinElement.textContent || vinElement.innerText } : { el: null, value: null },
-            serviceAdvisor: serviceAdvisorEl ? serviceAdvisorEl.innerText.trim() : "",
-            typeKendaraan: typeKendaraanEl ? typeKendaraanEl.innerText.trim() : "",
-            contactPerson: contactPersonVal
-        };
-    }
-
-    /**************** WhatsApp Check Functions ****************/
-    let activePhone = null;
-    let handledPhones = new Map();
-
-    function checkWhatsAppNumber(phone, ctx) {
-        if (handledPhones.get(phone)) return;
-
-        handledPhones.set(phone, true);
-        ensureIconBeforeInput(ctx.phoneEl, 'pending');
-
-        const apiUrl = `https://waclient.com/whatsapp-number-checker?number=${phone}`;
-
-        GM_xmlhttpRequest({
-            method: "GET",
-            url: apiUrl,
-            onload: function(response) {
-                try {
-                    const result = JSON.parse(response.responseText);
-
-                    if (result.status === "success") {
-                        // Valid WhatsApp number
-                        renderStatus("valid", phone, ctx);
-                        sendToSheet({
-                            policeRegNo: ctx.plate || "",
-                            equipmentNo: ctx.vin || "",
-                            contactPersonPhone: phone || "",
-                            serviceAdvisor: ctx.serviceAdvisor || "",
-                            typeKendaraan: ctx.typeKendaraan || "",
-                            contactPerson: ctx.contactPerson || "",
-                            statusWA: "valid",
-                        });
-                    } else if (result.status === "error") {
-                        // Invalid WhatsApp number
-                        renderStatus("invalid", phone, ctx);
-
-                        // Disable buttons sampai user memilih alasan
-                        document.querySelector('[data-id="quickCreateSaveAndCloseBtn"]').disabled = true;
-                        document.querySelectorAll('.fui-SplitButton button').forEach(btn => btn.disabled = true);
-
-                        // Tampilkan dropdown di sebelah Save & Close
-                        renderInvalidDropdown(phone, ctx, {
-                            policeNo: ctx.plate,
-                            chassisNo: ctx.vin
-                        });
-                    } else {
-                        // Unknown response
-                        console.error(LOGP, "Unknown API response:", result);
-                        ensureIconBeforeInput(ctx.phoneEl, 'unknown');
-                        handledPhones.set(phone, false);
-                    }
-                } catch (e) {
-                    console.error(LOGP, "Error parsing API response:", e);
-                    ensureIconBeforeInput(ctx.phoneEl, 'unknown');
-                    handledPhones.set(phone, false);
-                }
-            },
-            onerror: function(err) {
-                console.error(LOGP, "API request error:", err);
-                ensureIconBeforeInput(ctx.phoneEl, 'unknown');
-                handledPhones.set(phone, false);
-            }
-        });
-    }
-
-    function renderStatus(status, phone, { phoneEl, vin, plate }) {
-        if (phoneEl) {
-            ensureIconBeforeInput(phoneEl, status);
-        }
-
-        if (status === "valid" || status === "invalid") {
-            const title = status === "valid"
-                ? "WhatsApp TERVERIFIKASI"
-                : "bukan nomor WhatsApp!";
-
-            const message = status === "valid"
-                ? `Nomor ${phone} terverifikasi. Silakan lanjutkan proses.`
-                : `Nomor ${phone} tidak terhubung WhatsApp. Silakan pilih alasan.`;
-
-            showToast({
-                title,
-                message,
-                type: status
-            });
-        }
-    }
-
-    /**************** Main Scanner ****************/
-    let isScanning = false;
-    let lastSignature = "";
-
-    function scanAndProcess() {
-        if (isScanning) return;
-        isScanning = true;
-
-        try {
-            const { phones, plate, vin, serviceAdvisor, typeKendaraan, contactPerson } = readFields();
-
-            if (!phones.length) {
-                isScanning = false;
-                return;
-            }
-
-            const plateNorm = upperTrim(plate.value);
-            const vinNorm = upperTrim(vin.value);
-
-            phones.forEach(({ el, value }) => {
-                if (!el || !value) return;
-
-                const phoneAPIFormatted = formatPhoneForAPI(value);
-                if (!phoneAPIFormatted) {
-                    ensureIconBeforeInput(el, 'unknown');
-                    return;
-                }
-
-                const signature = `${phoneAPIFormatted}|${plateNorm}|${vinNorm}`;
-                const changed = signature !== lastSignature;
-
-                if (changed) {
-                    console.log(LOGP, "Detected changes:", { phoneAPIFormatted, plateNorm, vinNorm });
-                    lastSignature = signature;
-
-                    if (activePhone !== phoneAPIFormatted) {
-                        activePhone = phoneAPIFormatted;
-                        handledPhones.clear();
-                    }
-
-                    checkWhatsAppNumber(phoneAPIFormatted, {
-                        phoneEl: el,
-                        vin: vinNorm,
-                        plate: plateNorm,
-                        serviceAdvisor,
-                        typeKendaraan,
-                        contactPerson
-                    });
-                }
-            });
-        } catch (error) {
-            console.error(LOGP, "Error in scanAndProcess:", error);
-        } finally {
-            isScanning = false;
-        }
-    }
-
-    /**************** Start Scanner ****************/
-    let scanInterval = null;
-
-    function startScanner() {
-        if (scanInterval) clearInterval(scanInterval);
-        scanInterval = setInterval(scanAndProcess, RESCAN_MS);
-        console.log(LOGP, "Scanner started.");
-    }
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', startScanner);
+  /**************** Firebase Init ****************/
+  let app, db;
+  try {
+    if (!firebase.apps.length) {
+      app = firebase.initializeApp(FB);
     } else {
-        startScanner();
+      app = firebase.app();
+    }
+    db = firebase.database(app);
+    console.log(LOGP, "Firebase initialized");
+  } catch (e) {
+    console.error(LOGP, "Firebase init error:", e);
+    return;
+  }
+
+  /**************** Utils ****************/
+  function normalizePhoneNumber(input) {
+    if (!input) return null;
+    let n = String(input).replace(/\D/g, "");
+    if (n.startsWith("6262")) n = n.replace(/^62+/, "62");
+    if (n.startsWith("0")) n = "62" + n.slice(1);
+    else if (n.startsWith("+62")) n = n.replace(/^\+/, "");
+    else if (n.startsWith("8")) n = "62" + n;
+    if (n.length < 9) return null;
+    return n;
+  }
+
+  function upperTrim(val) {
+    if (!val) return "";
+    return String(val).trim().toUpperCase();
+  }
+
+  // Cache sederhana untuk dokumen
+  let documentCache = null;
+  function getDocumentCache() {
+    if (!documentCache) {
+      documentCache = [document];
+      try {
+        document.querySelectorAll("iframe").forEach(iframe => {
+          if (iframe.contentDocument) documentCache.push(iframe.contentDocument);
+        });
+      } catch (e) {}
+    }
+    return documentCache;
+  }
+
+  function qsaAllDocs(selector) {
+    const result = [];
+    const docs = getDocumentCache();
+    for (const d of docs) {
+      try {
+        const elements = d.querySelectorAll(selector);
+        if (elements.length) {
+          result.push(...Array.from(elements));
+        }
+      } catch (e) {}
+    }
+    return result;
+  }
+
+  function showToast({ title, message, type = "info" }) {
+    let container = document.getElementById("wa-toast-container");
+    if (!container) {
+      container = document.createElement("div");
+      container.id = "wa-toast-container";
+      document.body.appendChild(container);
     }
 
-    console.log(LOGP, "Script ready. Menunggu field muncul...");
+    const toast = document.createElement("div");
+    toast.className = `wa-toast ${type}`;
+
+    const header = document.createElement("div");
+    header.className = "wa-toast-header";
+
+    const titleEl = document.createElement("div");
+    titleEl.textContent = title;
+
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "wa-toast-close";
+    closeBtn.innerHTML = "&times;";
+    closeBtn.addEventListener("click", () => {
+      toast.style.animation = "waSlideOut 0.3s ease-out forwards";
+      setTimeout(() => toast.remove(), 300);
+    });
+
+    header.appendChild(titleEl);
+    header.appendChild(closeBtn);
+
+    const body = document.createElement("div");
+    body.className = "wa-toast-body";
+    body.textContent = message;
+
+    toast.appendChild(header);
+    toast.appendChild(body);
+    container.appendChild(toast);
+
+    // Auto remove setelah delay
+    setTimeout(() => {
+      if (toast.parentNode) {
+        toast.style.animation = "waSlideOut 0.3s ease-out forwards";
+        setTimeout(() => toast.remove(), 1200);
+      }
+    }, TOAST_AUTOHIDE_MS);
+
+    return toast;
+  }
+
+  function ensureIconBeforeInput(input, status) {
+    // Hapus indikator lama jika ada
+    const oldIndicator = input.parentNode.querySelector('.wa-status-indicator');
+    if (oldIndicator) oldIndicator.remove();
+
+    const indicator = document.createElement("span");
+    indicator.className = "wa-status-indicator";
+
+    switch(status) {
+      case 'pending':
+        indicator.textContent = '⏳';
+        indicator.style.backgroundColor = '#6c757d';
+        break;
+      case 'valid':
+        indicator.textContent = '✓';
+        indicator.style.backgroundColor = '#28a745';
+        break;
+      case 'invalid':
+        indicator.textContent = '!';
+        indicator.style.backgroundColor = '#dc3545';
+        break;
+      default:
+        indicator.textContent = '?';
+        indicator.style.backgroundColor = '#ffc107';
+    }
+
+    input.parentNode.style.position = 'relative';
+    input.style.paddingLeft = '30px';
+    input.parentNode.insertBefore(indicator, input);
+
+    return indicator;
+  }
+
+  /**************** Field Finders ****************/
+  // Selector yang lebih spesifik sesuai permintaan
+  function readFields() {
+    let phoneInput = null;
+    let plateInput = null;
+    let vinElement = null;
+
+    // Cari di semua dokumen (termasuk iframe)
+    const docs = getDocumentCache();
+    for (const d of docs) {
+      try {
+        if (!phoneInput) phoneInput = d.querySelector(SEL.phone);
+        if (!plateInput) plateInput = d.querySelector(SEL.plate);
+        if (!vinElement) vinElement = d.querySelector(SEL.vinText);
+      } catch (e) {}
+    }
+
+    return {
+      phone: phoneInput ? { el: phoneInput, value: phoneInput.value } : { el: null, value: null },
+      plate: plateInput ? { el: plateInput, value: plateInput.value } : { el: null, value: null },
+      vin: vinElement ? { el: vinElement, value: vinElement.textContent || vinElement.innerText } : { el: null, value: null }
+    };
+  }
+
+  /**************** RTDB Functions ****************/
+  let activePhone = null;
+  let detachFns = [];
+
+  function detachAll() {
+    detachFns.forEach(fn => fn());
+    detachFns = [];
+  }
+
+  function attachResultListeners(phone, ctx) {
+    detachAll(); // Hapus listener lama
+
+    const validRef = db.ref(PATH.valid).orderByChild("phone").equalTo(phone);
+    const onValid = validRef.on("child_added", (snap) => {
+      console.log(LOGP, "VALID hit:", snap.val());
+      renderStatus("valid", phone, ctx);
+      detachAll(); // Hentikan listener setelah hasil didapat
+    });
+
+    const invalidRef = db.ref(PATH.invalid).orderByChild("phone").equalTo(phone);
+    const onInvalid = invalidRef.on("child_added", (snap) => {
+      console.log(LOGP, "INVALID hit:", snap.val());
+      renderStatus("invalid", phone, ctx);
+      detachAll(); // Hentikan listener setelah hasil didapat
+    });
+
+    detachFns.push(() => validRef.off("child_added", onValid));
+    detachFns.push(() => invalidRef.off("child_added", onInvalid));
+
+    // Timeout untuk listener (15 detik)
+    const timeout = setTimeout(() => {
+      console.log(LOGP, "Listener timeout for phone:", phone);
+      detachAll();
+    }, 15000);
+
+    detachFns.push(() => clearTimeout(timeout));
+  }
+
+  function renderStatus(status, phone, { phoneEl, vin, plate }) {
+    // Update indicator
+    if (phoneEl) {
+      ensureIconBeforeInput(phoneEl, status);
+    }
+
+    // Show toast notification hanya untuk hasil valid/invalid
+    if (status === "valid" || status === "invalid") {
+      const title = status === "valid"
+        ? "WhatsApp TERVERIFIKASI"
+        : "WhatsApp TIDAK TERHUBUNG";
+
+      const message = status === "valid"
+        ? `Nomor ${phone} terverifikasi. Silakan lanjutkan proses.`
+        : `Nomor ${phone} tidak terhubung WhatsApp. Gunakan nomor lain.`;
+
+      showToast({
+        title,
+        message,
+        type: status
+      });
+    }
+  }
+
+  function pushPending({ phone, vin, plate }) {
+    const payload = {
+      phone,
+      policeNo: plate || "",
+      chassisNo: vin || "",
+      status: "pending",
+      source: "d365",
+      ts: Date.now()
+    };
+
+    db.ref(PATH.pending).push(payload)
+      .then(() => console.log(LOGP, "PUSH /pending:", payload))
+      .catch(err => console.error(LOGP, "RTDB push error:", err));
+  }
+
+  /**************** Main Scanner ****************/
+  let isScanning = false;
+  let lastSignature = "";
+
+  function scanAndProcess() {
+    if (isScanning) return;
+    isScanning = true;
+
+    try {
+      const { phone, plate, vin } = readFields();
+
+      if (!phone.el || !phone.value) {
+        isScanning = false;
+        return;
+      }
+
+      // Normalisasi data
+      const phoneNorm = normalizePhoneNumber(phone.value);
+      const plateNorm = upperTrim(plate.value);
+      const vinNorm = upperTrim(vin.value);
+
+      if (!phoneNorm) {
+        ensureIconBeforeInput(phone.el, 'unknown');
+        isScanning = false;
+        return;
+      }
+
+      const signature = `${phoneNorm}|${plateNorm}|${vinNorm}`;
+      const changed = signature !== lastSignature;
+
+      if (changed) {
+        lastSignature = signature;
+        console.log(LOGP, "Detected changes:", { phoneNorm, plateNorm, vinNorm });
+
+        // Set status indicator to processing
+        ensureIconBeforeInput(phone.el, 'pending');
+
+        // Detach old listeners if phone changed
+        if (activePhone !== phoneNorm) {
+          detachAll();
+          activePhone = phoneNorm;
+          attachResultListeners(activePhone, { phoneEl: phone.el, vin: vinNorm, plate: plateNorm });
+        }
+
+        // Push to pending
+        pushPending({ phone: phoneNorm, vin: vinNorm, plate: plateNorm });
+
+        // HAPUS NOTIFIKASI PROSES - tidak menampilkan toast saat proses
+      }
+    } catch (error) {
+      console.error(LOGP, "Error in scanAndProcess:", error);
+    } finally {
+      isScanning = false;
+    }
+  }
+
+  /**************** Optimized Scanning ****************/
+  let scanInterval = null;
+
+  function startScanner() {
+    if (scanInterval) clearInterval(scanInterval);
+    scanInterval = setInterval(scanAndProcess, RESCAN_MS);
+  }
+
+  // Mulai scanner setelah halaman dimuat
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startScanner);
+  } else {
+    startScanner();
+  }
+
+  console.log(LOGP, "Script ready. Menunggu field muncul...");
