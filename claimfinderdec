@@ -1,0 +1,4811 @@
+// ==UserScript==
+// @name         Passport Toyota - Claim Detail VIN Checker Format2 MainOperation
+// @namespace    http://tampermonkey.net/
+// @version      1.3.0
+// @description  Request ClaimDealerOTH Detail
+// @author       magenta project
+// @match        https://passport.toyota.astra.co.id:5004/*
+// @run-at       document-start
+// @grant        none
+// ==/UserScript==
+
+(function () {
+    'use strict';
+
+    /************************************************************
+   * CONFIG
+   ************************************************************/
+    const API_URL = 'https://passport.toyota.astra.co.id:5004/api/ClaimDealerOTH/Detail/onVisChange';
+    const VIN_DDL_URL = 'https://passport.toyota.astra.co.id:5004/api/ClaimDealerOTH/postDetailDdl';
+
+    const DEFAULT_BODY = {
+        dataClaimId: 0,
+        moduleType: 'FLP',
+        claimType: '',
+        wmi: '',
+        vds: '',
+        cd: '',
+        vis: '',
+        hisClaimType: '',
+        user: '',
+        epCodeDealer: 'TR15',
+        claimNo: ''
+    };
+
+    const REQUEST_DELAY_MS = 350;
+    const FREE_LIMIT = 6;
+    const MAIN_SERVICE_OPERATIONS = ['10000K', '20000K', '30000K', '40000K', '50000K', '60000K'];
+
+    let capturedAuthorization = '';
+    let isRunning = false;
+    let isPaused = false;
+    let shouldStop = false;
+
+    let queue = [];
+    let currentIndex = 0;
+    let processStartedAt = 0;
+    let activeVinStartedAt = 0;
+    let progressTimerId = null;
+    let vinDurations = [];
+    let totalResponseBytes = 0;
+    let totalResponseRequests = 0;
+
+    // Format Utama = 1 VIN = 1 baris dengan kolom free service 10K-60K
+    let mainResults = [];
+
+    // Format1 = detail per item2
+    let detailResults = [];
+
+    // Format2 = 1 VIN = 1 baris
+    let summaryResults = [];
+
+    let isMraRunning = false;
+    let mraRawResponse = null;
+
+    /************************************************************
+   * CAPTURE AUTHORIZATION DARI SESSION HALAMAN AKTIF
+   ************************************************************/
+    function setCapturedAuth(value) {
+        if (!value) return;
+        if (typeof value !== 'string') return;
+
+        if (value.toLowerCase().startsWith('bearer ')) {
+            capturedAuthorization = value;
+            window.__passportClaimAuth = value;
+            logTerminal('Authorization hijacked, session injected.', 'success');
+            updateAuthStatus();
+        }
+    }
+
+    function scanStorageForToken() {
+        const storages = [localStorage, sessionStorage];
+
+        for (const storage of storages) {
+            for (let i = 0; i < storage.length; i++) {
+                const key = storage.key(i);
+                const value = storage.getItem(key);
+
+                if (!value) continue;
+
+                // Token langsung dalam string
+                if (value.includes('eyJ') && value.split('.').length >= 3) {
+                    const token = value.replace(/^Bearer\s+/i, '').trim();
+                    setCapturedAuth('Bearer ' + token);
+                    logTerminal(`Token ditemukan dari storage key: ${key}`, 'success');
+                    return true;
+                }
+
+                // Token di dalam JSON storage
+                try {
+                    const parsed = JSON.parse(value);
+                    const possibleKeys = [
+                        'token',
+                        'accessToken',
+                        'access_token',
+                        'jwt',
+                        'authorization',
+                        'Authorization'
+                    ];
+
+                    for (const k of possibleKeys) {
+                        if (parsed && parsed[k]) {
+                            let token = String(parsed[k]).trim();
+
+                            if (token.toLowerCase().startsWith('bearer ')) {
+                                setCapturedAuth(token);
+                            } else if (token.includes('eyJ') && token.split('.').length >= 3) {
+                                setCapturedAuth('Bearer ' + token);
+                            }
+
+                            if (capturedAuthorization) {
+                                logTerminal(`Token ditemukan dari storage JSON key: ${key}.${k}`, 'success');
+                                return true;
+                            }
+                        }
+                    }
+                } catch (_) {}
+            }
+        }
+
+        return false;
+    }
+
+    const originalFetch = window.fetch;
+    window.fetch = async function (...args) {
+        try {
+            const input = args[0];
+            const init = args[1] || {};
+
+            if (init.headers) {
+                const h = new Headers(init.headers);
+                const auth = h.get('authorization');
+                setCapturedAuth(auth);
+            }
+
+            if (input instanceof Request) {
+                const auth = input.headers.get('authorization');
+                setCapturedAuth(auth);
+            }
+        } catch (_) {}
+
+        return originalFetch.apply(this, args);
+    };
+
+    const originalOpen = XMLHttpRequest.prototype.open;
+    const originalSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
+
+    XMLHttpRequest.prototype.open = function (...args) {
+        this.__tm_url = args[1];
+        return originalOpen.apply(this, args);
+    };
+
+    XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
+        try {
+            if (String(name).toLowerCase() === 'authorization') {
+                setCapturedAuth(value);
+            }
+        } catch (_) {}
+
+        return originalSetRequestHeader.apply(this, arguments);
+    };
+
+    /************************************************************
+   * UI
+   ************************************************************/
+    function injectUILegacy() {
+        const style = document.createElement('style');
+        style.textContent = `
+      #tmClaimPanel {
+        --tm-bg: #f5f7fb;
+        --tm-surface: rgba(255, 255, 255, .88);
+        --tm-surface-solid: #ffffff;
+        --tm-ink: #172033;
+        --tm-muted: #667085;
+        --tm-border: rgba(93, 112, 143, .18);
+        --tm-blue: #0a84ff;
+        --tm-green: #34c759;
+        --tm-orange: #ff9f0a;
+        --tm-red: #ff453a;
+        --tm-cyan: #20b8d9;
+        --tm-violet: #7c6df2;
+        position: fixed;
+        left: 0;
+        top: 0;
+        right: auto;
+        bottom: auto;
+        width: 100vw;
+        height: 100vh;
+        z-index: 999999;
+        color: var(--tm-ink);
+        background:
+          linear-gradient(180deg, rgba(255,255,255,.96), rgba(245,247,251,.96)),
+          var(--tm-bg);
+        border: 0;
+        box-shadow: none;
+        border-radius: 0;
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+        overflow: hidden;
+        transition: width .28s ease, height .28s ease, left .28s ease, top .28s ease, right .28s ease, bottom .28s ease, border-radius .28s ease, box-shadow .28s ease, transform .2s ease;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: geometricPrecision;
+      }
+
+      #tmClaimPanel * {
+        box-sizing: border-box;
+      }
+
+      #tmClaimHeader {
+        height: 78px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 18px 14px 20px;
+        background: rgba(255,255,255,.74);
+        border-bottom: 1px solid var(--tm-border);
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+        cursor: default;
+        user-select: none;
+      }
+
+      #tmClaimHeader:active {
+        cursor: default;
+      }
+
+      .tmBrand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
+
+      .tmBrandMark {
+        width: 42px;
+        height: 42px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        color: #fff;
+        background: linear-gradient(135deg, var(--tm-blue), var(--tm-cyan) 48%, var(--tm-green));
+        border-radius: 15px;
+        box-shadow: 0 12px 26px rgba(10,132,255,.24);
+      }
+
+      .tmBrandMark svg,
+      .tmIconBtn svg {
+        width: 20px;
+        height: 20px;
+        display: block;
+      }
+
+      #tmClaimHeaderTitle {
+        font-size: 16px;
+        font-weight: 800;
+        color: var(--tm-ink);
+        line-height: 1.15;
+      }
+
+      #tmClaimHeaderSub {
+        font-size: 12px;
+        color: var(--tm-muted);
+        margin-top: 4px;
+        line-height: 1.35;
+      }
+
+      .tmHeaderActions {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+      }
+
+      .tmIconBtn {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--tm-border);
+        background: rgba(255,255,255,.78);
+        color: #344054;
+        border-radius: 13px;
+        cursor: pointer;
+        box-shadow: 0 4px 12px rgba(43,55,83,.08);
+        transition: transform .14s ease, background .14s ease, border-color .14s ease, box-shadow .14s ease;
+      }
+
+      .tmIconBtn:hover {
+        transform: translateY(-1px);
+        background: #fff;
+        border-color: rgba(10,132,255,.24);
+        box-shadow: 0 8px 20px rgba(43,55,83,.12);
+      }
+
+      .tmIconBtn:active {
+        transform: translateY(0) scale(.98);
+      }
+
+      .tmIconBtn:focus-visible,
+      .tmBtn:focus-visible,
+      .tmTabBtn:focus-visible,
+      .tmResultModeBtn:focus-visible,
+      .tmRawToggle:focus-visible,
+      #tmVinInput:focus,
+      #tmEpCodeInput:focus {
+        outline: 3px solid rgba(10,132,255,.22);
+        outline-offset: 2px;
+      }
+
+      .tmIconExpand {
+        display: none;
+      }
+
+      #tmCloseBtn:hover {
+        color: var(--tm-red);
+        border-color: rgba(255,69,58,.25);
+      }
+
+      #tmClaimBody {
+        height: calc(100% - 78px);
+        display: grid;
+        grid-template-rows: auto auto minmax(0, 1fr);
+        gap: 12px;
+        padding: 14px;
+        background:
+          linear-gradient(120deg, rgba(10,132,255,.05), transparent 34%),
+          linear-gradient(300deg, rgba(52,199,89,.05), transparent 32%),
+          var(--tm-bg);
+      }
+
+      .tmCard {
+        background: var(--tm-surface);
+        border: 1px solid var(--tm-border);
+        border-radius: 20px;
+        box-shadow: 0 10px 28px rgba(43,55,83,.08);
+        overflow: hidden;
+      }
+
+      .tmStatusCard {
+        padding: 14px 16px 15px 16px;
+      }
+
+      .tmStatusRow {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: 11px;
+      }
+
+      .tmStatusMeta {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+        flex-wrap: wrap;
+      }
+
+      .tmStatusLabel {
+        font-size: 11px;
+        font-weight: 800;
+        color: #475467;
+        text-transform: uppercase;
+        line-height: 1;
+      }
+
+      #tmAuthStatus {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 6px 11px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 800;
+        line-height: 1.2;
+        border: 1px solid rgba(255,159,10,.24);
+        background: rgba(255,159,10,.12);
+        color: #9a5a00;
+      }
+
+      #tmAuthStatus.tmStatusOk {
+        border-color: rgba(52,199,89,.25);
+        background: rgba(52,199,89,.12);
+        color: #16703a;
+      }
+
+      #tmAuthStatus.tmStatusWarn {
+        border-color: rgba(255,159,10,.24);
+        background: rgba(255,159,10,.12);
+        color: #9a5a00;
+      }
+
+      #tmCounter {
+        min-width: 74px;
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 30px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: #eef6ff;
+        color: #075db3;
+        border: 1px solid rgba(10,132,255,.16);
+        font-size: 13px;
+        font-weight: 850;
+        font-variant-numeric: tabular-nums;
+      }
+
+      #tmProgressWrap {
+        height: 10px;
+        background: #e9edf5;
+        border-radius: 999px;
+        overflow: hidden;
+        box-shadow: inset 0 1px 2px rgba(43,55,83,.08);
+      }
+
+      #tmProgressBar {
+        width: 0%;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--tm-blue), var(--tm-cyan), var(--tm-green));
+        box-shadow: 0 0 0 1px rgba(255,255,255,.22) inset, 0 6px 18px rgba(10,132,255,.26);
+        transition: width .24s ease;
+      }
+
+      .tmTabsCard {
+        padding: 8px;
+      }
+
+      .tmTabs {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 5px;
+        width: min(460px, 100%);
+        padding: 4px;
+        background: #edf1f7;
+        border: 1px solid rgba(93,112,143,.12);
+        border-radius: 17px;
+      }
+
+      .tmTabBtn {
+        border: 0;
+        min-width: 0;
+        height: 38px;
+        padding: 0 15px;
+        border-radius: 13px;
+        cursor: pointer;
+        color: #667085;
+        background: transparent;
+        font-size: 13px;
+        font-weight: 850;
+        transition: color .14s ease, background .14s ease, box-shadow .14s ease, transform .14s ease;
+      }
+
+      .tmTabBtn:hover {
+        color: var(--tm-ink);
+      }
+
+      .tmTabBtn.active {
+        color: #0b3b73;
+        background: #fff;
+        box-shadow: 0 7px 16px rgba(43,55,83,.12);
+      }
+
+      .tmTabContent {
+        height: 100%;
+        overflow: hidden;
+        display: none;
+      }
+
+      .tmTabContent.active {
+        display: block;
+        animation: tmPanelFade .18s ease both;
+      }
+
+      @keyframes tmPanelFade {
+        from { opacity: .58; transform: translateY(4px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      #tmMainContent {
+        min-height: 0;
+        background: rgba(255,255,255,.92);
+      }
+
+      #tmTabHasil.active {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        background: #fff;
+      }
+
+      .tmResultModeBar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 14px;
+        border-bottom: 1px solid #edf1f7;
+        background: #fbfcff;
+      }
+
+      .tmResultModeTitle {
+        min-width: 0;
+      }
+
+      .tmResultModeTitle strong {
+        display: block;
+        color: var(--tm-ink);
+        font-size: 13px;
+        font-weight: 900;
+        line-height: 1.2;
+      }
+
+      .tmResultModeTitle span {
+        display: block;
+        color: var(--tm-muted);
+        font-size: 12px;
+        line-height: 1.35;
+        margin-top: 2px;
+      }
+
+      .tmResultModeSwitch {
+        display: inline-grid;
+        grid-template-columns: repeat(2, minmax(112px, 1fr));
+        gap: 4px;
+        flex: 0 0 auto;
+        padding: 4px;
+        border: 1px solid rgba(93,112,143,.14);
+        border-radius: 15px;
+        background: #edf1f7;
+      }
+
+      .tmResultModeBtn {
+        height: 34px;
+        border: 0;
+        border-radius: 11px;
+        background: transparent;
+        color: #667085;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 900;
+        transition: background .14s ease, color .14s ease, box-shadow .14s ease;
+      }
+
+      .tmResultModeBtn.active {
+        background: #fff;
+        color: #0b3b73;
+        box-shadow: 0 7px 16px rgba(43,55,83,.12);
+      }
+
+      .tmResultView {
+        min-height: 0;
+        height: 100%;
+        display: none;
+      }
+
+      .tmResultView.active {
+        display: block;
+      }
+
+      #tmBulkResultView {
+        overflow: hidden;
+      }
+
+      .tmInputGrid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 320px;
+        gap: 16px;
+        padding: 16px;
+        height: 100%;
+        min-height: 0;
+      }
+
+      .tmInputEditor {
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .tmFieldHeader {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+
+      .tmFieldHint {
+        color: var(--tm-muted);
+        font-size: 12px;
+        line-height: 1.4;
+        margin-top: 3px;
+      }
+
+      .tmSoftPill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 26px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        background: rgba(124,109,242,.1);
+        color: #5347c2;
+        border: 1px solid rgba(124,109,242,.18);
+        font-size: 11px;
+        font-weight: 850;
+        white-space: nowrap;
+      }
+
+      #tmVinInput {
+        width: 100%;
+        flex: 1 1 auto;
+        min-height: 360px;
+        resize: none;
+        outline: none;
+        color: var(--tm-ink);
+        background: #fbfcff;
+        border: 1px solid rgba(93,112,143,.2);
+        border-radius: 18px;
+        padding: 16px;
+        font-family: "SFMono-Regular", "Cascadia Code", Consolas, monospace;
+        font-size: 13px;
+        line-height: 1.55;
+        box-shadow: inset 0 1px 2px rgba(43,55,83,.05);
+        transition: border-color .14s ease, background .14s ease, box-shadow .14s ease;
+      }
+
+      #tmVinInput::placeholder {
+        color: #98a2b3;
+      }
+
+      #tmVinInput:focus {
+        border-color: rgba(10,132,255,.46);
+        background: #fff;
+        box-shadow: inset 0 1px 2px rgba(43,55,83,.04), 0 0 0 4px rgba(10,132,255,.08);
+      }
+
+      .tmSideBox {
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .tmControlCard,
+      .tmHelpBox {
+        border: 1px solid var(--tm-border);
+        background: #fff;
+        border-radius: 18px;
+        box-shadow: 0 8px 22px rgba(43,55,83,.07);
+      }
+
+      .tmControlCard {
+        padding: 14px;
+      }
+
+      #tmEpCodeInput {
+        width: 100%;
+        height: 42px;
+        border: 1px solid rgba(93,112,143,.2);
+        border-radius: 13px;
+        padding: 0 12px;
+        color: var(--tm-ink);
+        outline: none;
+        background: #fbfcff;
+        font-size: 13px;
+        font-weight: 750;
+        transition: border-color .14s ease, background .14s ease, box-shadow .14s ease;
+      }
+
+      #tmEpCodeInput:focus {
+        border-color: rgba(10,132,255,.46);
+        background: #fff;
+        box-shadow: 0 0 0 4px rgba(10,132,255,.08);
+      }
+
+      .tmBtnGrid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 9px;
+        margin-top: 12px;
+      }
+
+      .tmExportStack {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 9px;
+        margin-top: 12px;
+      }
+
+      .tmBtn {
+        border: 1px solid transparent;
+        color: #fff;
+        height: 42px;
+        border-radius: 13px;
+        cursor: pointer;
+        font-weight: 850;
+        font-size: 13px;
+        letter-spacing: 0;
+        box-shadow: 0 8px 18px rgba(43,55,83,.12);
+        transition: transform .14s ease, box-shadow .14s ease, filter .14s ease, background .14s ease, border-color .14s ease;
+      }
+
+      .tmBtn:hover {
+        transform: translateY(-1px);
+        filter: brightness(1.02);
+        box-shadow: 0 12px 24px rgba(43,55,83,.16);
+      }
+
+      .tmBtn:active {
+        transform: translateY(0) scale(.99);
+        box-shadow: 0 5px 12px rgba(43,55,83,.12);
+      }
+
+      .tmBtnStart { background: linear-gradient(135deg, #0a84ff, #20b8d9); }
+      .tmBtnMra { background: linear-gradient(135deg, #7c6df2, #20b8d9); }
+      .tmBtnPause { background: linear-gradient(135deg, #ffb340, #ff8a00); color: #2b1700; }
+      .tmBtnStop { background: linear-gradient(135deg, #ff453a, #ff6b6b); }
+      .tmBtnContinue { background: linear-gradient(135deg, #34c759, #12b981); color: #062313; }
+      .tmBtnExport {
+        background: #f7f9fc;
+        color: #344054;
+        border-color: rgba(93,112,143,.2);
+        box-shadow: 0 7px 16px rgba(43,55,83,.08);
+      }
+
+      .tmBtnExport:hover {
+        background: #fff;
+        border-color: rgba(10,132,255,.24);
+      }
+
+      .tmMiniLabel {
+        font-size: 11px;
+        font-weight: 850;
+        color: #475467;
+        text-transform: uppercase;
+        line-height: 1.15;
+      }
+
+      .tmHelpBox {
+        padding: 14px;
+        color: #475467;
+        font-size: 12px;
+        line-height: 1.52;
+        overflow: auto;
+      }
+
+      .tmHelpBox b {
+        color: var(--tm-ink);
+      }
+
+      #tmResultWrap {
+        height: 100%;
+        overflow: auto;
+        background: #fff;
+      }
+
+      #tmMraResultView {
+        overflow: auto;
+        background: #fbfcff;
+      }
+
+      .tmMraEmpty {
+        height: 100%;
+        min-height: 260px;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        color: #667085;
+        text-align: center;
+      }
+
+      .tmMraEmpty strong {
+        display: block;
+        color: var(--tm-ink);
+        font-size: 16px;
+        margin-bottom: 6px;
+      }
+
+      .tmMraDashboard {
+        display: grid;
+        gap: 14px;
+        padding: 14px;
+      }
+
+      .tmMraHero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 14px;
+        align-items: center;
+        padding: 16px;
+        border: 1px solid var(--tm-border);
+        border-radius: 20px;
+        background:
+          linear-gradient(135deg, rgba(10,132,255,.1), rgba(32,184,217,.06)),
+          #fff;
+        box-shadow: 0 10px 24px rgba(43,55,83,.08);
+      }
+
+      .tmMraHeroTitle {
+        color: var(--tm-ink);
+        font-size: 13px;
+        font-weight: 900;
+        text-transform: uppercase;
+        line-height: 1.2;
+      }
+
+      .tmMraVin {
+        margin-top: 5px;
+        color: #0b3b73;
+        font-family: "SFMono-Regular", "Cascadia Code", Consolas, monospace;
+        font-size: 20px;
+        font-weight: 900;
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+      }
+
+      .tmMraModel {
+        margin-top: 4px;
+        color: #475467;
+        font-size: 13px;
+        line-height: 1.4;
+      }
+
+      .tmMraGrid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) minmax(320px, .65fr);
+        gap: 14px;
+      }
+
+      .tmMraCard {
+        min-width: 0;
+        border: 1px solid var(--tm-border);
+        border-radius: 20px;
+        background: #fff;
+        box-shadow: 0 8px 22px rgba(43,55,83,.07);
+        overflow: hidden;
+      }
+
+      .tmMraCardHeader {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        border-bottom: 1px solid #edf1f7;
+        background: #fbfcff;
+      }
+
+      .tmMraCardHeader h3 {
+        margin: 0;
+        color: var(--tm-ink);
+        font-size: 13px;
+        font-weight: 900;
+        line-height: 1.2;
+      }
+
+      .tmMraKeyGrid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        padding: 14px;
+      }
+
+      .tmMraKv {
+        min-width: 0;
+        padding: 11px 12px;
+        border: 1px solid #edf1f7;
+        border-radius: 14px;
+        background: #fbfcff;
+      }
+
+      .tmMraKv span {
+        display: block;
+        color: #667085;
+        font-size: 10px;
+        font-weight: 900;
+        line-height: 1.2;
+        text-transform: uppercase;
+      }
+
+      .tmMraKv strong {
+        display: block;
+        margin-top: 5px;
+        color: #273244;
+        font-size: 12px;
+        font-weight: 850;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+      }
+
+      .tmMraMetricGrid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 9px;
+        padding: 14px;
+      }
+
+      .tmMraMetric {
+        padding: 13px 12px;
+        border-radius: 16px;
+        border: 1px solid #edf1f7;
+        background: #fbfcff;
+      }
+
+      .tmMraMetric span {
+        display: block;
+        color: #667085;
+        font-size: 10px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .tmMraMetric strong {
+        display: block;
+        margin-top: 6px;
+        color: var(--tm-ink);
+        font-size: 24px;
+        font-weight: 950;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .tmMraOperationGroups {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 10px;
+        padding: 0 14px 14px 14px;
+      }
+
+      .tmMraOperationList {
+        min-width: 0;
+        padding: 12px;
+        border-radius: 16px;
+        border: 1px solid #edf1f7;
+        background: #fbfcff;
+      }
+
+      .tmMraOperationList span {
+        display: block;
+        color: #667085;
+        font-size: 10px;
+        font-weight: 900;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+      }
+
+      .tmMraPillWrap {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .tmMraOpPill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 26px;
+        padding: 5px 9px;
+        border-radius: 999px;
+        background: rgba(10,132,255,.1);
+        color: #075db3;
+        border: 1px solid rgba(10,132,255,.16);
+        font-size: 11px;
+        font-weight: 900;
+        font-family: "SFMono-Regular", "Cascadia Code", Consolas, monospace;
+      }
+
+      .tmMraOpPill.tmNonFree {
+        background: rgba(255,159,10,.1);
+        color: #9a5a00;
+        border-color: rgba(255,159,10,.18);
+      }
+
+      .tmMraClaimTableWrap {
+        overflow: auto;
+      }
+
+      #tmMraClaimTable {
+        width: 100%;
+        min-width: 1280px;
+        border-collapse: separate;
+        border-spacing: 0;
+        font-size: 12px;
+        color: #273244;
+      }
+
+      #tmMraClaimTable thead {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+      }
+
+      #tmMraClaimTable th,
+      #tmMraClaimTable td {
+        padding: 11px 12px;
+        border-bottom: 1px solid #edf1f7;
+        text-align: left;
+        vertical-align: top;
+        white-space: nowrap;
+      }
+
+      #tmMraClaimTable th {
+        background: #f7f9fc;
+        color: #475467;
+        font-size: 11px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      #tmMraClaimTable tbody tr:nth-child(even) {
+        background: #fbfcff;
+      }
+
+      #tmMraClaimTable tbody tr:hover {
+        background: #eef6ff;
+      }
+
+      .tmBadgeFree,
+      .tmBadgeNonFree {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 26px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 900;
+        white-space: nowrap;
+      }
+
+      .tmBadgeFree {
+        color: #16703a;
+        background: rgba(52,199,89,.12);
+        border: 1px solid rgba(52,199,89,.2);
+      }
+
+      .tmBadgeNonFree {
+        color: #9a5a00;
+        background: rgba(255,159,10,.12);
+        border: 1px solid rgba(255,159,10,.2);
+      }
+
+      .tmRawToggle {
+        height: 34px;
+        border: 1px solid rgba(93,112,143,.2);
+        border-radius: 999px;
+        padding: 0 13px;
+        color: #344054;
+        background: #fff;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 900;
+        box-shadow: 0 6px 14px rgba(43,55,83,.08);
+      }
+
+      #tmMraRawJson {
+        max-height: 420px;
+        overflow: auto;
+        margin: 0;
+        padding: 14px;
+        color: #344054;
+        background: #fbfcff;
+        font-family: "SFMono-Regular", "Cascadia Code", Consolas, monospace;
+        font-size: 12px;
+        line-height: 1.5;
+        white-space: pre;
+      }
+
+      #tmResultTable {
+        width: 100%;
+        min-width: 1180px;
+        border-collapse: separate;
+        border-spacing: 0;
+        color: #273244;
+        font-size: 12px;
+      }
+
+      #tmResultTable thead {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+      }
+
+      #tmResultTable th,
+      #tmResultTable td {
+        border-bottom: 1px solid #edf1f7;
+        padding: 11px 12px;
+        text-align: left;
+        vertical-align: top;
+        white-space: nowrap;
+      }
+
+      #tmResultTable th {
+        color: #475467;
+        background: #f7f9fc;
+        border-bottom: 1px solid #e4e9f2;
+        font-size: 11px;
+        font-weight: 900;
+        text-transform: uppercase;
+        line-height: 1.25;
+      }
+
+      #tmResultTable tbody tr {
+        transition: background .14s ease;
+      }
+
+      #tmResultTable tbody tr:nth-child(even) {
+        background: #fbfcff;
+      }
+
+      #tmResultTable tbody tr:hover {
+        background: #eef6ff;
+      }
+
+      #tmResultTable td {
+        line-height: 1.45;
+      }
+
+      #tmResultTable td.tmNoCell {
+        color: #667085;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+      }
+
+      #tmResultTable td.tmVinCell {
+        color: #0b3b73;
+        font-weight: 900;
+        letter-spacing: 0;
+      }
+
+      #tmResultTable td.tmNumericCell {
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+      }
+
+      #tmResultTable td.tmMulti {
+        white-space: pre-line;
+        min-width: 190px;
+        max-width: 360px;
+        color: #344054;
+      }
+
+      #tmResultTable td.tmOperationCell {
+        min-width: 240px;
+      }
+
+      .tmBadgeOk,
+      .tmBadgeWarn,
+      .tmBadgeNeutral,
+      .tmStatusBadge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 34px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-weight: 900;
+        font-size: 12px;
+        line-height: 1.15;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .tmBadgeOk {
+        background: rgba(52,199,89,.12);
+        color: #16703a;
+        border: 1px solid rgba(52,199,89,.2);
+      }
+
+      .tmBadgeWarn {
+        background: rgba(255,69,58,.11);
+        color: #bc2d24;
+        border: 1px solid rgba(255,69,58,.18);
+      }
+
+      .tmBadgeNeutral {
+        background: rgba(10,132,255,.1);
+        color: #075db3;
+        border: 1px solid rgba(10,132,255,.16);
+      }
+
+      .tmStatusBadge {
+        background: rgba(124,109,242,.1);
+        color: #5347c2;
+        border: 1px solid rgba(124,109,242,.18);
+        max-width: 210px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      #tmTerminal {
+        height: 100%;
+        overflow: auto;
+        background: #fbfcff;
+        color: #344054;
+        padding: 14px;
+        font-family: "SFMono-Regular", "Cascadia Code", Consolas, monospace;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      #tmTerminal > div {
+        padding: 8px 10px;
+        margin-bottom: 7px;
+        border-radius: 12px;
+        border: 1px solid transparent;
+        background: #fff;
+        box-shadow: 0 4px 12px rgba(43,55,83,.05);
+        overflow-wrap: anywhere;
+      }
+
+      .tmLogInfo {
+        color: #344054;
+        border-color: rgba(10,132,255,.12) !important;
+      }
+
+      .tmLogWarn {
+        color: #9a5a00;
+        background: rgba(255,159,10,.08) !important;
+        border-color: rgba(255,159,10,.18) !important;
+      }
+
+      .tmLogErr {
+        color: #bc2d24;
+        background: rgba(255,69,58,.08) !important;
+        border-color: rgba(255,69,58,.18) !important;
+      }
+
+      .tmLogSuccess {
+        color: #16703a;
+        background: rgba(52,199,89,.08) !important;
+        border-color: rgba(52,199,89,.18) !important;
+      }
+
+      .tmHidden {
+        display: none !important;
+      }
+
+      #tmClaimPanel.tmCollapsed {
+        left: auto !important;
+        top: auto !important;
+        right: 24px !important;
+        bottom: 24px !important;
+        width: 64px !important;
+        height: 64px !important;
+        border-radius: 999px;
+        border-color: rgba(255,255,255,.82);
+        background: #fff;
+        box-shadow: 0 18px 42px rgba(10,132,255,.22), 0 6px 18px rgba(43,55,83,.16);
+        cursor: pointer;
+      }
+
+      #tmClaimPanel.tmCollapsed #tmClaimHeader {
+        width: 100%;
+        height: 100%;
+        padding: 0;
+        justify-content: center;
+        border-bottom: 0;
+        background: transparent;
+        cursor: pointer;
+      }
+
+      #tmClaimPanel.tmCollapsed .tmBrand,
+      #tmClaimPanel.tmCollapsed #tmCloseBtn,
+      #tmClaimPanel.tmCollapsed #tmClaimBody {
+        display: none !important;
+      }
+
+      #tmClaimPanel.tmCollapsed .tmHeaderActions {
+        width: 100%;
+        height: 100%;
+        justify-content: center;
+      }
+
+      #tmClaimPanel.tmCollapsed #tmMinBtn {
+        width: 64px;
+        height: 64px;
+        min-width: 64px;
+        border-radius: 999px;
+        color: #fff;
+        border-color: transparent;
+        background: linear-gradient(135deg, var(--tm-blue), var(--tm-cyan) 48%, var(--tm-green));
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.28);
+      }
+
+      #tmClaimPanel.tmCollapsed .tmIconCollapse {
+        display: none;
+      }
+
+      #tmClaimPanel.tmCollapsed .tmIconExpand {
+        display: block;
+      }
+
+      #tmClaimPanel.tmCollapsed #tmMinBtn:hover {
+        transform: scale(1.03);
+      }
+
+      @media (max-width: 980px) {
+        #tmClaimPanel {
+          left: 0;
+          top: 0;
+          width: 100vw;
+          height: 100vh;
+          border-radius: 0;
+        }
+
+        #tmClaimHeader {
+          height: 72px;
+          padding: 12px 14px;
+        }
+
+        #tmClaimBody {
+          height: calc(100% - 72px);
+          padding: 10px;
+          gap: 10px;
+        }
+
+        .tmInputGrid {
+          grid-template-columns: 1fr;
+          overflow: auto;
+        }
+
+        .tmSideBox {
+          min-height: auto;
+        }
+
+        #tmVinInput {
+          min-height: 300px;
+        }
+      }
+
+      @media (max-width: 640px) {
+        #tmClaimHeaderSub {
+          display: none;
+        }
+
+        .tmBrandMark {
+          width: 38px;
+          height: 38px;
+          border-radius: 13px;
+        }
+
+        #tmClaimHeaderTitle {
+          font-size: 14px;
+        }
+
+        .tmStatusRow {
+          grid-template-columns: 1fr;
+          align-items: stretch;
+        }
+
+        #tmCounter {
+          justify-self: start;
+        }
+
+        .tmTabs {
+          width: 100%;
+        }
+
+        .tmTabBtn {
+          height: 36px;
+          padding: 0 8px;
+          font-size: 12px;
+        }
+
+        .tmBtnGrid {
+          grid-template-columns: 1fr;
+        }
+
+        .tmResultModeBar {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .tmMraHero {
+          grid-template-columns: 1fr;
+        }
+
+        .tmResultModeSwitch {
+          width: 100%;
+        }
+
+        .tmMraGrid,
+        .tmMraKeyGrid,
+        .tmMraMetricGrid {
+          grid-template-columns: 1fr;
+        }
+      }
+    `;
+      document.documentElement.appendChild(style);
+
+      const panel = document.createElement('div');
+      panel.id = 'tmClaimPanel';
+      panel.innerHTML = `
+      <div id="tmClaimHeader">
+        <div class="tmBrand">
+          <div class="tmBrandMark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M7 6.5h6.5M7 11h10M7 15.5h5.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+              <path d="M5.5 3.5h13a1.8 1.8 0 0 1 1.8 1.8v13.4a1.8 1.8 0 0 1-1.8 1.8h-13a1.8 1.8 0 0 1-1.8-1.8V5.3a1.8 1.8 0 0 1 1.8-1.8Z" stroke="currentColor" stroke-width="1.9"/>
+            </svg>
+          </div>
+          <div>
+            <div id="tmClaimHeaderTitle">TCARE CLAIM FINDER v1.0</div>
+            <div id="tmClaimHeaderSub">Format Utama: free service 10K-60K by Magenta Project</div>
+          </div>
+        </div>
+        <div class="tmHeaderActions">
+          <button class="tmIconBtn" id="tmMinBtn" title="Collapse panel" aria-label="Collapse panel">
+            <span class="tmIconCollapse" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M6 12h12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+              </svg>
+            </span>
+            <span class="tmIconExpand" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M10.5 17a6.5 6.5 0 1 1 0-13 6.5 6.5 0 0 1 0 13Z" stroke="currentColor" stroke-width="2"/>
+                <path d="M15.4 15.4 20 20" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+                <path d="M8 10.5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </span>
+          </button>
+          <button class="tmIconBtn" id="tmCloseBtn" title="Close panel" aria-label="Close panel">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="m7 7 10 10M17 7 7 17" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="tmClaimBody">
+        <div class="tmCard tmStatusCard">
+          <div class="tmStatusRow">
+            <div class="tmStatusMeta">
+              <span class="tmStatusLabel">Session</span>
+              <div id="tmAuthStatus" class="tmStatusWarn">Mengecek token/session...</div>
+            </div>
+            <div id="tmCounter">0 / 0</div>
+          </div>
+          <div id="tmProgressWrap">
+            <div id="tmProgressBar"></div>
+          </div>
+        </div>
+
+        <div class="tmCard tmTabsCard">
+          <div class="tmTabs">
+            <button class="tmTabBtn active" data-tab="input">Input</button>
+            <button class="tmTabBtn" data-tab="hasil">Hasil</button>
+            <button class="tmTabBtn" data-tab="terminal">Terminal</button>
+          </div>
+        </div>
+
+        <div class="tmCard" id="tmMainContent">
+          <div class="tmTabContent active" id="tmTabInput">
+            <div class="tmInputGrid">
+              <div class="tmInputEditor">
+                <div class="tmFieldHeader">
+                  <div>
+                    <div class="tmMiniLabel">Nomor rangka</div>
+                    <div class="tmFieldHint">Input nomor rangka, 1 baris = 1 nomor rangka.</div>
+                  </div>
+                  <span class="tmSoftPill">Multiline</span>
+                </div>
+                <textarea id="tmVinInput" spellcheck="false" placeholder="MHKAB1BY1RK102261&#10;MHKAA1BA4NJ047262&#10;JTMAA7BJ4R4082465"></textarea>
+              </div>
+
+              <div class="tmSideBox">
+                <div class="tmControlCard">
+                  <div class="tmMiniLabel">epCodeDealer request</div>
+                  <input id="tmEpCodeInput" value="TR15" />
+
+                  <div class="tmBtnGrid">
+                    <button class="tmBtn tmBtnStart" id="tmStartBtn">Start</button>
+                    <button class="tmBtn tmBtnPause" id="tmPauseBtn">Pause</button>
+                    <button class="tmBtn tmBtnContinue" id="tmContinueBtn">Continue</button>
+                    <button class="tmBtn tmBtnStop" id="tmStopBtn">Stop</button>
+                  </div>
+
+                  <div class="tmExportStack">
+                    <button class="tmBtn tmBtnExport" id="tmExportMainBtn">Export Format Utama</button>
+                    <button class="tmBtn tmBtnExport" id="tmExportFormat1Btn">Export Format1 Detail</button>
+                    <button class="tmBtn tmBtnExport" id="tmExportFormat2Btn">Export Format2 Summary</button>
+                  </div>
+                </div>
+
+                <div class="tmHelpBox">
+                  <b>Hitungan free:</b><br>
+                  claimCount = jumlah mainOperationNo unik yang berformat angka dan diakhiri huruf k.<br><br>
+                  Contoh dihitung:<br>
+                  10000k, 20000k, 30000k.<br><br>
+                  Tidak dihitung:<br>
+                  10000B, 20000b, 642991, YHG14A.<br><br>
+                  remainingFree = 6 - claimCount.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="tmTabContent" id="tmTabHasil">
+            <div class="tmResultModeBar">
+              <div class="tmResultModeTitle">
+                <strong>Hasil Pemeriksaan</strong>
+                <span>Format Utama menampilkan klaim free service 10K sampai 60K per VIN.</span>
+              </div>
+            </div>
+
+            <div class="tmResultView active" id="tmBulkResultView">
+              <div id="tmResultWrap">
+                <table id="tmResultTable">
+                  <thead>
+                    <tr>
+                      <th>No</th>
+                      <th>VIN</th>
+                      <th>deliveryDate</th>
+                      <th>modelCode</th>
+                      <th>modelName</th>
+                      <th>RepairDate</th>
+                      <th>10000K</th>
+                      <th>RepairDate</th>
+                      <th>20000K</th>
+                      <th>RepairDate</th>
+                      <th>30000K</th>
+                      <th>RepairDate</th>
+                      <th>40000K</th>
+                      <th>RepairDate</th>
+                      <th>50000K</th>
+                      <th>RepairDate</th>
+                      <th>60000K</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tmResultBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="tmTabContent" id="tmTabTerminal">
+            <div id="tmTerminal"></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+      document.documentElement.appendChild(panel);
+
+      document.getElementById('tmStartBtn').addEventListener('click', startProcess);
+      document.getElementById('tmPauseBtn').addEventListener('click', pauseProcess);
+      document.getElementById('tmContinueBtn').addEventListener('click', continueProcess);
+      document.getElementById('tmStopBtn').addEventListener('click', stopProcess);
+      document.getElementById('tmExportMainBtn').addEventListener('click', exportMainCSV);
+      document.getElementById('tmExportFormat1Btn').addEventListener('click', exportFormat1CSV);
+      document.getElementById('tmExportFormat2Btn').addEventListener('click', exportFormat2CSV);
+
+      document.getElementById('tmCloseBtn').addEventListener('click', () => {
+          panel.remove();
+      });
+
+      const minBtn = document.getElementById('tmMinBtn');
+      function setPanelCollapsed(collapsed) {
+          panel.classList.toggle('tmCollapsed', collapsed);
+          minBtn.setAttribute('title', collapsed ? 'Expand panel' : 'Collapse panel');
+          minBtn.setAttribute('aria-label', collapsed ? 'Expand panel' : 'Collapse panel');
+
+          if (collapsed) {
+              panel.style.left = 'auto';
+              panel.style.top = 'auto';
+              panel.style.right = '24px';
+              panel.style.bottom = '24px';
+              panel.style.width = '64px';
+              panel.style.height = '64px';
+              return;
+          }
+
+          panel.style.left = '';
+          panel.style.top = '';
+          panel.style.right = '';
+          panel.style.bottom = '';
+          panel.style.width = '';
+          panel.style.height = '';
+      }
+
+      minBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const body = document.getElementById('tmClaimBody');
+          const collapsed = !body.classList.contains('tmHidden');
+          body.classList.toggle('tmHidden', collapsed);
+          setPanelCollapsed(collapsed);
+      });
+
+      panel.addEventListener('click', () => {
+          if (!panel.classList.contains('tmCollapsed')) return;
+          minBtn.click();
+      });
+
+      document.querySelectorAll('.tmTabBtn').forEach(btn => {
+          btn.addEventListener('click', () => {
+              switchTab(btn.dataset.tab);
+          });
+      });
+
+      // Fullscreen mode stays locked in place so it behaves like the main page.
+
+      logTerminal('Panel fullscreen siap. Tab Input, Hasil, dan Terminal sudah dipisahkan.', 'info');
+      logTerminal('Claim count sekarang dihitung dari mainOperationNo angka yang diakhiri k.', 'success');
+
+      const found = scanStorageForToken();
+      if (!found) {
+          logTerminal('Token belum ditemukan. Buka fitur Passport yang biasanya memanggil API agar Authorization tertangkap otomatis.', 'warn');
+      }
+
+      updateAuthStatus();
+  }
+
+    function switchTab(tabName) {
+        document.querySelectorAll('.tmTabBtn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.tab === tabName);
+        });
+
+        document.getElementById('tmTabInput').classList.toggle('active', tabName === 'input');
+        document.getElementById('tmTabHasil').classList.toggle('active', tabName === 'hasil');
+        document.getElementById('tmTabTerminal').classList.toggle('active', tabName === 'terminal');
+    }
+
+    function makeDraggable(panel, handle) {
+        let isDown = false;
+        let offsetX = 0;
+        let offsetY = 0;
+
+        handle.addEventListener('mousedown', (e) => {
+            if (panel.classList.contains('tmCollapsed')) return;
+            if (e.target instanceof Element && e.target.closest('button')) return;
+
+            isDown = true;
+            const rect = panel.getBoundingClientRect();
+            offsetX = e.clientX - rect.left;
+            offsetY = e.clientY - rect.top;
+
+            panel.style.left = rect.left + 'px';
+            panel.style.top = rect.top + 'px';
+            panel.style.right = 'auto';
+            panel.style.bottom = 'auto';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDown) return;
+
+            panel.style.left = Math.max(0, e.clientX - offsetX) + 'px';
+            panel.style.top = Math.max(0, e.clientY - offsetY) + 'px';
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDown = false;
+        });
+    }
+
+    /************************************************************
+   * VIN PARSER
+   ************************************************************/
+    function normalizeVIN(raw) {
+        return String(raw || '')
+            .trim()
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, '');
+    }
+
+    function parseVIN(raw) {
+        const vin = normalizeVIN(raw);
+
+        if (!vin) {
+            throw new Error('VIN kosong');
+        }
+
+        if (vin.length !== 17) {
+            throw new Error(`VIN harus 17 karakter. Diterima ${vin.length}: ${vin}`);
+        }
+
+        return buildStandardVINInfo(vin);
+    }
+
+    function buildStandardVINInfo(vin) {
+        return {
+            vin,
+            wmi: vin.substring(0, 3),
+            vds: vin.substring(3, 8),
+            cd: vin.substring(8, 9),
+            vis: vin.substring(9, 17)
+        };
+    }
+
+    function buildLooseVINInfo(vin, reason = '') {
+        return {
+            vin,
+            wmi: vin.substring(0, 3),
+            vds: '',
+            cd: '',
+            vis: '',
+            needsVdsLookup: true,
+            parseReason: reason
+        };
+    }
+
+    function canAttemptVdsLookup(vin) {
+        return vin.length >= 11 && vin.length <= 18 && vin.substring(0, 3).length === 3;
+    }
+
+    function buildRequestBody(vinInfo) {
+        const epCodeDealer = document.getElementById('tmEpCodeInput').value.trim() || 'TR15';
+
+        return {
+            ...DEFAULT_BODY,
+            epCodeDealer,
+            wmi: vinInfo.wmi,
+            vds: vinInfo.vds,
+            cd: vinInfo.cd,
+            vis: vinInfo.vis
+        };
+    }
+
+    /************************************************************
+   * REQUEST
+   ************************************************************/
+    async function requestClaimDetail(vinInfo) {
+        if (!capturedAuthorization) {
+            scanStorageForToken();
+        }
+
+        if (!capturedAuthorization) {
+            throw new Error('Authorization belum ditemukan. Pastikan halaman sudah login dan ada request API aktif dari aplikasi.');
+        }
+
+        const body = buildRequestBody(vinInfo);
+
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            mode: 'cors',
+            credentials: 'include',
+            referrer: 'https://passport.toyota.astra.co.id:5004/',
+            headers: {
+                accept: 'application/json, text/plain, */*',
+                'content-type': 'application/json',
+                authorization: capturedAuthorization
+            },
+            body: JSON.stringify(body)
+        });
+
+        const text = await response.text();
+        recordResponseSize(text);
+
+        let json;
+        try {
+            json = JSON.parse(text);
+        } catch (_) {
+            throw new Error(`Response bukan JSON. HTTP ${response.status}. Body: ${text.slice(0, 300)}`);
+        }
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${json.message || json.detail || 'Request gagal'}`);
+        }
+
+        return json;
+    }
+
+    async function requestClaimDetailWithFallback(vinInfo) {
+        const attemptedKeys = new Set();
+        let firstError = null;
+        let firstJson = null;
+
+        if (!vinInfo.needsVdsLookup) {
+            try {
+                attemptedKeys.add(getVINInfoKey(vinInfo));
+                firstJson = await requestClaimDetail(vinInfo);
+
+                if (hasClaimDetailData(firstJson)) {
+                    return {
+                        json: firstJson,
+                        vinInfo,
+                        usedFallback: false
+                    };
+                }
+
+                logTerminal(
+                    `Data belum ditemukan dengan split awal (${formatVINInfoSplit(vinInfo)}). Cek kandidat VDS...`,
+                    'warn'
+                );
+            } catch (err) {
+                firstError = err;
+
+                if (isAuthorizationError(err)) {
+                    throw err;
+                }
+
+                logTerminal(
+                    `Request split awal gagal (${formatVINInfoSplit(vinInfo)}): ${err.message}. Cek kandidat VDS...`,
+                    'warn'
+                );
+            }
+        } else {
+            logTerminal(`VIN ${vinInfo.vin} akan dicek memakai lookup VDS karena format awal tidak standar.`, 'warn');
+        }
+
+        const candidates = await resolveVINCandidates(vinInfo);
+        const candidateLabels = [];
+
+        for (const candidate of candidates) {
+            const key = getVINInfoKey(candidate);
+            if (attemptedKeys.has(key)) continue;
+
+            attemptedKeys.add(key);
+            candidateLabels.push(formatVINInfoSplit(candidate));
+            logTerminal(`Coba kandidat VDS: ${formatVINInfoSplit(candidate)}`, 'info');
+
+            try {
+                const json = await requestClaimDetail(candidate);
+
+                if (hasClaimDetailData(json)) {
+                    logTerminal(`Split VIN berhasil: ${formatVINInfoSplit(candidate)}`, 'success');
+                    return {
+                        json,
+                        vinInfo: candidate,
+                        usedFallback: true
+                    };
+                }
+            } catch (err) {
+                if (isAuthorizationError(err)) {
+                    throw err;
+                }
+
+                logTerminal(`Kandidat gagal (${formatVINInfoSplit(candidate)}): ${err.message}`, 'warn');
+            }
+        }
+
+        if (firstJson && hasClaimDetailData(firstJson)) {
+            return {
+                json: firstJson,
+                vinInfo,
+                usedFallback: false
+            };
+        }
+
+        const suffix = candidateLabels.length
+        ? ` Kandidat dicoba: ${candidateLabels.join(' ; ')}.`
+      : ' Tidak ada kandidat VDS yang cocok.';
+
+        throw new Error(`Data VIN tidak ditemukan setelah cek VDS.${suffix}${firstError ? ' Error awal: ' + firstError.message : ''}`);
+    }
+
+    async function requestVinDdl(vin) {
+        if (!capturedAuthorization) {
+            scanStorageForToken();
+        }
+
+        if (!capturedAuthorization) {
+            throw new Error('Authorization belum ditemukan. Pastikan halaman sudah login dan ada request API aktif dari aplikasi.');
+        }
+
+        const wmi = vin.substring(0, 3);
+        const vdsProbe = vin.substring(3, 7);
+
+        if (wmi.length !== 3 || vdsProbe.length < 4) {
+            return [];
+        }
+
+        const body = {
+            route: '2',
+            getVinListParam: {
+                claimType: '',
+                fts: 'vds',
+                wmi: wmi.toLowerCase(),
+                vds: vdsProbe.toLowerCase(),
+                cd: '',
+                vis: ''
+            }
+        };
+
+        const response = await fetch(VIN_DDL_URL, {
+            method: 'POST',
+            mode: 'cors',
+            credentials: 'include',
+            referrer: 'https://passport.toyota.astra.co.id:5004/',
+            headers: {
+                accept: 'application/json, text/plain, */*',
+                'content-type': 'application/json',
+                authorization: capturedAuthorization
+            },
+            body: JSON.stringify(body)
+        });
+
+        const text = await response.text();
+        recordResponseSize(text);
+
+        let json;
+        try {
+            json = JSON.parse(text);
+        } catch (_) {
+            throw new Error(`Response lookup VDS bukan JSON. HTTP ${response.status}. Body: ${text.slice(0, 300)}`);
+        }
+
+        if (!response.ok) {
+            throw new Error(`Lookup VDS HTTP ${response.status}: ${json.message || json.detail || 'Request gagal'}`);
+        }
+
+        const values = Array.isArray(json?.data) ? json.data : [];
+
+        return values
+            .map(item => String(item?.value || item?.label || '').trim().toUpperCase())
+            .filter(Boolean);
+    }
+
+    async function resolveVINCandidates(vinInfo) {
+        const vin = vinInfo.vin;
+        const candidates = [];
+
+        function add(candidate) {
+            if (!candidate) return;
+            if (!candidate.wmi || !candidate.vds || candidate.vis.length !== 8) return;
+            if (candidates.some(item => getVINInfoKey(item) === getVINInfoKey(candidate))) return;
+            candidates.push(candidate);
+        }
+
+        try {
+            const ddlValues = await requestVinDdl(vin);
+            const matchingValues = ddlValues.filter(value => vin.startsWith(vin.substring(0, 3) + value));
+
+            logTerminal(
+                matchingValues.length
+                ? `Lookup VDS menemukan kandidat: ${matchingValues.join(', ')}.`
+          : `Lookup VDS tidak menemukan kandidat yang cocok untuk prefix ${vin.substring(3, 7)}.`,
+          matchingValues.length ? 'success' : 'warn'
+      );
+
+        for (const value of matchingValues) {
+            for (const candidate of buildVINCandidatesFromVDS(vin, value, 'ddl')) {
+                add(candidate);
+            }
+        }
+    } catch (err) {
+        if (isAuthorizationError(err)) {
+            throw err;
+        }
+
+        logTerminal(`Lookup VDS gagal: ${err.message}. Coba kandidat lokal.`, 'warn');
+    }
+
+      for (const candidate of buildLocalVINCandidates(vin)) {
+          add(candidate);
+      }
+
+      return candidates;
+  }
+
+    function buildLocalVINCandidates(vin) {
+        const candidates = [];
+
+        if (vin.length === 17) {
+            candidates.push(buildStandardVINInfo(vin));
+            candidates.push({
+                vin,
+                wmi: vin.substring(0, 3),
+                vds: vin.substring(3, 9),
+                cd: '',
+                vis: vin.substring(9, 17),
+                source: 'local-vds6'
+            });
+        }
+
+        if (vin.length === 16) {
+            candidates.push({
+                vin,
+                wmi: vin.substring(0, 3),
+                vds: vin.substring(3, 8),
+                cd: '',
+                vis: vin.substring(8, 16),
+                source: 'local-vds5-no-cd'
+            });
+        }
+
+        return candidates;
+    }
+
+    function buildVINCandidatesFromVDS(vin, vds, source = '') {
+        const wmi = vin.substring(0, 3);
+        const prefix = wmi + vds;
+
+        if (!vin.startsWith(prefix)) {
+            return [];
+        }
+
+        const tail = vin.substring(prefix.length);
+        const candidates = [];
+
+        if (tail.length === 8) {
+            candidates.push({
+                vin,
+                wmi,
+                vds,
+                cd: '',
+                vis: tail,
+                source
+            });
+        }
+
+        if (tail.length === 9 && vds.length === 5) {
+            candidates.push({
+                vin,
+                wmi,
+                vds,
+                cd: tail.substring(0, 1),
+                vis: tail.substring(1),
+                source
+            });
+        }
+
+        return candidates;
+    }
+
+    function hasClaimDetailData(json) {
+        const data = json?.data;
+        if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+
+        const item1 = data.item1;
+        const item2 = Array.isArray(data.item2) ? data.item2 : [];
+
+        if (item2.length > 0) return true;
+        if (!item1 || typeof item1 !== 'object') return false;
+
+        return [
+            'modelCode',
+            'modelName',
+            'wmi',
+            'vds',
+            'cd',
+            'vis',
+            'modelSfx',
+            'salesCode',
+            'franchiseLabel'
+        ].some(key => String(item1[key] ?? '').trim());
+    }
+
+    function getVINInfoKey(vinInfo) {
+        return [
+            vinInfo.wmi || '',
+            vinInfo.vds || '',
+            vinInfo.cd || '',
+            vinInfo.vis || ''
+        ].join('|').toUpperCase();
+    }
+
+    function formatVINInfoSplit(vinInfo) {
+        return `wmi=${vinInfo.wmi || '-'}, vds=${vinInfo.vds || '-'}, cd=${vinInfo.cd || '-'}, vis=${vinInfo.vis || '-'}`;
+    }
+
+    function isAuthorizationError(err) {
+        const message = String(err?.message || '').toLowerCase();
+        return message.includes('authorization') || message.includes('http 401') || message.includes('http 403');
+    }
+
+    /************************************************************
+   * MRA SINGLE VIN CHECK
+   ************************************************************/
+    async function runMraCheck() {
+        if (isMraRunning) {
+            logTerminal('[MRA] Request masih berjalan.', 'warn');
+            return;
+        }
+
+        const input = document.getElementById('tmVinInput').value;
+        const firstLine = input
+        .split(/\r?\n/)
+        .map(x => x.trim())
+        .find(Boolean);
+
+        if (!firstLine) {
+            logTerminal('[MRA] ERROR: Input nomor rangka masih kosong.', 'error');
+            switchTab('terminal');
+            return;
+        }
+
+        let vinInfo;
+        try {
+            vinInfo = parseVIN(firstLine);
+        } catch (err) {
+            logTerminal(`[MRA] ERROR: VIN pertama tidak valid. ${err.message}`, 'error');
+            switchTab('terminal');
+            return;
+        }
+
+        if (!capturedAuthorization) {
+            scanStorageForToken();
+        }
+
+        if (!capturedAuthorization) {
+            logTerminal('[MRA] ERROR: Authorization belum ditemukan. Pastikan halaman sudah login dan ada request API aktif dari aplikasi.', 'error');
+            switchTab('terminal');
+            return;
+        }
+
+        isMraRunning = true;
+        switchTab('terminal');
+        logTerminal(`[MRA] Ambil VIN pertama dari input: ${vinInfo.vin}`, 'info');
+        logTerminal('[MRA] Request detail...', 'info');
+
+        try {
+            const json = await requestClaimDetail(vinInfo);
+            const item2 = Array.isArray(json?.data?.item2) ? json.data.item2 : [];
+            const summary = getMraFreeSummary(item2);
+
+            logTerminal(
+                `[MRA] Response OK. item2: ${summary.totalClaims}, free claimed: ${summary.claimCount}, remaining free: ${summary.remainingFree}.`,
+                'success'
+            );
+
+            renderMraDetail(vinInfo.vin, json);
+            switchTab('hasil');
+            logTerminal('[MRA] Render detail selesai.', 'success');
+        } catch (err) {
+            logTerminal(`[MRA] ERROR: ${err.message}`, 'error');
+        } finally {
+            isMraRunning = false;
+        }
+    }
+
+    /************************************************************
+   * PROCESS CONTROL
+   ************************************************************/
+    async function startProcess() {
+        if (isRunning) {
+            logTerminal('Proses masih berjalan. Gunakan Pause atau Stop terlebih dahulu.', 'warn');
+            return;
+        }
+
+        const lines = getVinInputLines();
+
+        if (!lines.length) {
+            logTerminal('Input nomor rangka masih kosong.', 'warn');
+            return;
+        }
+
+        queue = [];
+        mainResults = [];
+        detailResults = [];
+        summaryResults = [];
+        currentIndex = 0;
+        shouldStop = false;
+        isPaused = false;
+        isRunning = true;
+        resetProgressMetrics();
+
+        clearTable();
+
+        for (const line of lines) {
+            try {
+                queue.push(parseVIN(line));
+            } catch (err) {
+                const invalidVin = normalizeVIN(line);
+
+                if (canAttemptVdsLookup(invalidVin)) {
+                    queue.push(buildLooseVINInfo(invalidVin, err.message));
+                    logTerminal(`VIN tidak standar akan dicek via lookup VDS: ${invalidVin} | ${err.message}`, 'warn');
+                    continue;
+                }
+
+                logTerminal(`VIN invalid dilewati: ${line.trim()} | ${err.message}`, 'error');
+
+                summaryResults.push({
+                    no: summaryResults.length + 1,
+                    vin: invalidVin || line.trim(),
+                    claimCount: '',
+                    remainingFree: '',
+                    modelCode: '',
+                    modelName: '',
+                    epCodeDealer: '',
+                    deliveryDate: '',
+                    claimType: '',
+                    repairDate: '',
+                    mainOperationNo: '',
+                    status: 'INVALID VIN',
+                    error: err.message
+                });
+
+                pushMainEmptyRow(invalidVin || line.trim());
+            }
+        }
+
+        renderMainResults();
+
+        if (!queue.length) {
+            isRunning = false;
+            logTerminal('Tidak ada VIN valid untuk diproses.', 'error');
+            updateProgress();
+            return;
+        }
+
+        switchTab('terminal');
+        logTerminal(`Mulai proses ${queue.length} nomor rangka valid.`, 'success');
+        startProgressTimer();
+        updateProgress();
+
+        await processQueue();
+    }
+
+    function pauseProcess() {
+        if (!isRunning) return;
+        isPaused = true;
+        logTerminal('Proses dijeda.', 'warn');
+    }
+
+    function continueProcess() {
+        if (!isRunning) {
+            logTerminal('Tidak ada proses berjalan untuk dilanjutkan.', 'warn');
+            return;
+        }
+
+        if (!isPaused) {
+            logTerminal('Proses tidak sedang pause.', 'warn');
+            return;
+        }
+
+        isPaused = false;
+        logTerminal('Proses dilanjutkan.', 'success');
+    }
+
+    function stopProcess() {
+        if (!isRunning) {
+            logTerminal('Tidak ada proses berjalan.', 'warn');
+            return;
+        }
+
+        shouldStop = true;
+        isPaused = false;
+        logTerminal('Stop diminta. Proses akan berhenti setelah request aktif selesai.', 'warn');
+    }
+
+    async function processQueue() {
+        while (currentIndex < queue.length) {
+            if (shouldStop) {
+                logTerminal('Proses dihentikan oleh user.', 'warn');
+                break;
+            }
+
+            while (isPaused) {
+                await sleep(250);
+            }
+
+            const vinInfo = queue[currentIndex];
+            const rowNo = currentIndex + 1;
+            const vinStartedAt = Date.now();
+            activeVinStartedAt = vinStartedAt;
+
+            logTerminal(
+                `[${rowNo}/${queue.length}] Request VIN ${vinInfo.vin} | wmi=${vinInfo.wmi}, vds=${vinInfo.vds}, cd=${vinInfo.cd}, vis=${vinInfo.vis}`,
+                'info'
+            );
+            updateProgress();
+
+            try {
+                const result = await requestClaimDetailWithFallback(vinInfo);
+                const json = result.json;
+                const resolvedVinInfo = result.vinInfo;
+
+                normalizeAndStoreMainFormat(resolvedVinInfo.vin, json);
+                normalizeAndStoreDetailFormat(resolvedVinInfo.vin, json);
+                normalizeAndStoreSummaryFormat(resolvedVinInfo.vin, json);
+
+                const item2 = Array.isArray(json?.data?.item2) ? json.data.item2 : [];
+                const item2Count = item2.length;
+                const claimCount = countFreeClaims(item2);
+                const remainingFree = Math.max(FREE_LIMIT - claimCount, 0);
+                const claimedOps = getClaimedFreeOperations(item2).join(', ') || '-';
+
+                logTerminal(
+                    `[${rowNo}/${queue.length}] OK ${resolvedVinInfo.vin}. item2: ${item2Count}, free claimed: ${claimCount}, sisa free: ${remainingFree}, op: ${claimedOps}.`,
+                    'success'
+                );
+
+                if (result.usedFallback) {
+                    logTerminal(`[${rowNo}/${queue.length}] Split final ${formatVINInfoSplit(resolvedVinInfo)}.`, 'success');
+                }
+            } catch (err) {
+                logTerminal(`[${rowNo}/${queue.length}] ERROR ${vinInfo.vin}: ${err.message}`, 'error');
+
+                summaryResults.push({
+                    no: summaryResults.length + 1,
+                    vin: vinInfo.vin,
+                    claimCount: '',
+                    remainingFree: '',
+                    modelCode: '',
+                    modelName: '',
+                    epCodeDealer: '',
+                    deliveryDate: '',
+                    claimType: '',
+                    repairDate: '',
+                    mainOperationNo: '',
+                    status: 'ERROR',
+                    error: err.message
+                });
+
+                pushMainEmptyRow(vinInfo.vin);
+
+                detailResults.push({
+                    no: detailResults.length + 1,
+                    vin: vinInfo.vin,
+                    modelCode: '',
+                    modelName: '',
+                    epCodeDealer: '',
+                    claimType: '',
+                    deliveryDate: '',
+                    repairDate: '',
+                    km: '',
+                    mainOperationNo: '',
+                    condition: '',
+                    serviceNo: '',
+                    status: 'ERROR',
+                    error: err.message
+                });
+            }
+
+            vinDurations.push(Date.now() - vinStartedAt);
+            activeVinStartedAt = 0;
+            currentIndex++;
+            renderMainResults();
+            updateProgress();
+
+            if (currentIndex < queue.length) {
+                await sleep(REQUEST_DELAY_MS);
+            }
+        }
+
+        isRunning = false;
+        isPaused = false;
+        activeVinStartedAt = 0;
+        stopProgressTimer();
+
+        updateProgress();
+        switchTab('hasil');
+
+        if (shouldStop) {
+            logTerminal(`Selesai sebagian. Diproses ${currentIndex}/${queue.length}.`, 'warn');
+        } else {
+            logTerminal(`Selesai. Total VIN diproses: ${queue.length}. Total baris Format Utama: ${mainResults.length}.`, 'success');
+        }
+    }
+
+    /************************************************************
+   * FORMAT UTAMA
+   ************************************************************/
+    function normalizeAndStoreMainFormat(vin, json) {
+        const item1 = json?.data?.item1 || {};
+        const item2 = Array.isArray(json?.data?.item2) ? json.data.item2 : [];
+        const row = createMainRow(vin, item1, item2);
+
+        for (const claim of item2) {
+            const operation = normalizeMainServiceOperation(claim?.mainOperationNo);
+            if (!operation) continue;
+
+            const repairDateKey = `repairDate${operation}`;
+            const serviceKey = `service${operation}`;
+            const repairDate = formatDate(claim?.repairDate) || '-';
+            const epCodeDealer = String(claim?.epCodeDealer ?? '').trim() || '-';
+
+            row[repairDateKey] = repairDate;
+            row[serviceKey] = epCodeDealer;
+        }
+
+        mainResults.push(row);
+    }
+
+    function createMainRow(vin, item1 = {}, item2 = []) {
+        const row = {
+            no: mainResults.length + 1,
+            vin,
+            deliveryDate: formatDate(firstNonEmpty(item2.map(x => x.deliveryDate)) || item1.deliveryDate || ''),
+            modelCode: item1.modelCode || '',
+            modelName: item1.modelName || ''
+        };
+
+        for (const operation of MAIN_SERVICE_OPERATIONS) {
+            row[`repairDate${operation}`] = '-';
+            row[`service${operation}`] = '-';
+        }
+
+        return row;
+    }
+
+    function pushMainEmptyRow(vin) {
+        mainResults.push(createMainRow(vin));
+    }
+
+    function normalizeMainServiceOperation(value) {
+        const match = String(value ?? '')
+        .trim()
+        .toUpperCase()
+        .match(/^(\d+)K$/);
+
+        if (!match) return '';
+
+        const operation = `${match[1]}K`;
+        return MAIN_SERVICE_OPERATIONS.includes(operation) ? operation : '';
+    }
+
+    /************************************************************
+   * FORMAT1 DETAIL
+   ************************************************************/
+    function normalizeAndStoreDetailFormat(vin, json) {
+        const item1 = json?.data?.item1 || {};
+        const item2 = json?.data?.item2;
+
+        if (Array.isArray(item2) && item2.length > 0) {
+            for (const claim of item2) {
+                detailResults.push({
+                    no: detailResults.length + 1,
+                    vin,
+                    modelCode: item1.modelCode || '',
+                    modelName: item1.modelName || '',
+                    epCodeDealer: claim.epCodeDealer || '',
+                    claimType: claim.claimType || item1.claimType || '',
+                    deliveryDate: formatDate(claim.deliveryDate),
+                    repairDate: formatDate(claim.repairDate),
+                    km: claim.km ?? '',
+                    mainOperationNo: claim.mainOperationNo || '',
+                    condition: claim.condition || '',
+                    serviceNo: claim.serviceNo ?? '',
+                    status: json?.message || 'OK',
+                    error: ''
+                });
+            }
+        } else {
+            detailResults.push({
+                no: detailResults.length + 1,
+                vin,
+                modelCode: item1.modelCode || '',
+                modelName: item1.modelName || '',
+                epCodeDealer: '',
+                claimType: item1.claimType || '',
+                deliveryDate: '',
+                repairDate: '',
+                km: '',
+                mainOperationNo: '',
+                condition: '',
+                serviceNo: '',
+                status: 'OK - item2 kosong',
+                error: ''
+            });
+        }
+    }
+
+    /************************************************************
+   * FORMAT2 SUMMARY
+   ************************************************************/
+    function normalizeAndStoreSummaryFormat(vin, json) {
+        const item1 = json?.data?.item1 || {};
+        const item2 = Array.isArray(json?.data?.item2) ? json.data.item2 : [];
+
+        const claimCount = countFreeClaims(item2);
+        const remainingFree = Math.max(FREE_LIMIT - claimCount, 0);
+
+        const epCodeDealerList = item2.map(x => x.epCodeDealer || '').filter(Boolean);
+        const claimTypeList = item2.map(x => x.claimType || '').filter(Boolean);
+        const repairDateList = item2.map(x => formatDate(x.repairDate) || '').filter(Boolean);
+        const mainOperationList = item2.map(x => x.mainOperationNo || '').filter(Boolean);
+
+        const deliveryDate = formatDate(firstNonEmpty(item2.map(x => x.deliveryDate)) || '');
+
+        summaryResults.push({
+            no: summaryResults.length + 1,
+            vin,
+            claimCount,
+            remainingFree,
+            modelCode: item1.modelCode || '',
+            modelName: item1.modelName || '',
+            epCodeDealer: joinMulti(epCodeDealerList),
+            deliveryDate,
+            claimType: joinMulti(claimTypeList),
+            repairDate: joinMulti(repairDateList),
+            mainOperationNo: joinMulti(mainOperationList),
+            status: json?.message || 'OK',
+            error: ''
+        });
+    }
+
+    /************************************************************
+   * HITUNG FREE CLAIM BERDASARKAN mainOperationNo
+   ************************************************************/
+    function getClaimedFreeOperations(item2) {
+        if (!Array.isArray(item2)) return [];
+
+        const claimedOperations = new Set();
+
+        for (const item of item2) {
+            const operation = String(item?.mainOperationNo || '')
+            .trim()
+            .toLowerCase();
+
+            // Hanya hitung yang formatnya angka lalu huruf k.
+            // Dihitung: 10000k, 20000k, 30000k
+            // Tidak dihitung: 10000B, 20000b, 642991, YHG14A
+            const match = operation.match(/^(\d+)k$/);
+
+            if (match) {
+                claimedOperations.add(match[1] + 'k');
+            }
+        }
+
+        return Array.from(claimedOperations).sort((a, b) => {
+            const na = Number(a.replace(/\D/g, ''));
+            const nb = Number(b.replace(/\D/g, ''));
+            return na - nb;
+        });
+    }
+
+    function countFreeClaims(item2) {
+        return getClaimedFreeOperations(item2).length;
+    }
+
+    /************************************************************
+   * MRA DETAIL RENDERING
+   ************************************************************/
+    function classifyFreeStatus(mainOperationNo) {
+        const operation = String(mainOperationNo ?? '').trim();
+        return /^\d+k$/i.test(operation) ? 'FREE SERVICE' : 'NON FREE';
+    }
+
+    function getMraFreeSummary(item2) {
+        const claims = Array.isArray(item2) ? item2 : [];
+        const freeOps = [];
+        const nonFreeOps = [];
+
+        for (const claim of claims) {
+            const operation = String(claim?.mainOperationNo ?? '').trim();
+
+            if (classifyFreeStatus(operation) === 'FREE SERVICE') {
+                freeOps.push(operation || '-');
+            } else {
+                nonFreeOps.push(operation || '-');
+            }
+        }
+
+        const claimCount = freeOps.length;
+
+        return {
+            totalClaims: claims.length,
+            claimCount,
+            remainingFree: Math.max(FREE_LIMIT - claimCount, 0),
+            freeOps,
+            nonFreeOps
+        };
+    }
+
+    function renderMraDetail(vin, json) {
+        const target = document.getElementById('tmMraDetail');
+        if (!target) return;
+
+        mraRawResponse = json;
+
+        const item1 = json?.data?.item1 || {};
+        const item2 = Array.isArray(json?.data?.item2) ? json.data.item2 : [];
+        const summary = getMraFreeSummary(item2);
+
+        const vehicleFields = [
+            ['VIN', vin],
+            ['modelCode', item1.modelCode],
+            ['modelName', item1.modelName],
+            ['wmi', item1.wmi],
+            ['vds', item1.vds],
+            ['cd', item1.cd],
+            ['vis', item1.vis],
+            ['modelSfx', item1.modelSfx],
+            ['franchiseLabel', item1.franchiseLabel],
+            ['salesCode', item1.salesCode],
+            ['claimType', item1.claimType],
+            ['warrTypeValue', item1.warrTypeValue],
+            ['warrTypeLabel', item1.warrTypeLabel]
+        ];
+
+        target.innerHTML = `
+      <div class="tmMraDashboard">
+        <div class="tmMraHero">
+          <div>
+            <div class="tmMraHeroTitle">MRA Detail</div>
+            <div class="tmMraVin">${escapeHtml(vin)}</div>
+            <div class="tmMraModel">${escapeHtml(displayValue(item1.modelName || item1.modelCode))}</div>
+          </div>
+          <span class="tmStatusBadge">${escapeHtml(json?.message || 'OK')}</span>
+        </div>
+
+        <div class="tmMraGrid">
+          <div class="tmMraCard">
+            <div class="tmMraCardHeader">
+              <h3>Vehicle Summary</h3>
+            </div>
+            <div class="tmMraKeyGrid">
+              ${vehicleFields.map(([label, value]) => renderMraField(label, value)).join('')}
+            </div>
+          </div>
+
+          <div class="tmMraCard">
+            <div class="tmMraCardHeader">
+              <h3>Free Service Summary</h3>
+            </div>
+            <div class="tmMraMetricGrid">
+              <div class="tmMraMetric">
+                <span>Total item2 / Claim History</span>
+                <strong>${escapeHtml(summary.totalClaims)}</strong>
+              </div>
+              <div class="tmMraMetric">
+                <span>Free Claimed</span>
+                <strong>${escapeHtml(summary.claimCount)}</strong>
+              </div>
+              <div class="tmMraMetric">
+                <span>Remaining Free</span>
+                <strong>${escapeHtml(summary.remainingFree)}</strong>
+              </div>
+            </div>
+            <div class="tmMraOperationGroups">
+              <div class="tmMraOperationList">
+                <span>Claimed free operation list</span>
+                <div class="tmMraPillWrap">${renderMraOperationPills(summary.freeOps, 'free')}</div>
+              </div>
+              <div class="tmMraOperationList">
+                <span>Non-free operation list</span>
+                <div class="tmMraPillWrap">${renderMraOperationPills(summary.nonFreeOps, 'nonFree')}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tmMraCard">
+          <div class="tmMraCardHeader">
+            <h3>Claim History Table</h3>
+          </div>
+          <div class="tmMraClaimTableWrap">
+            <table id="tmMraClaimTable">
+              <thead>
+                <tr>
+                  <th>No</th>
+                  <th>epCodeDealer</th>
+                  <th>claimType</th>
+                  <th>deliveryDate</th>
+                  <th>repairDate</th>
+                  <th>km</th>
+                  <th>mainOperationNo</th>
+                  <th>condition</th>
+                  <th>sourceTable</th>
+                  <th>repairCompletion</th>
+                  <th>punctualFlag</th>
+                  <th>serviceNo</th>
+                  <th>freeStatus</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${renderMraClaimRows(item2)}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="tmMraCard">
+          <div class="tmMraCardHeader">
+            <h3>Raw Response</h3>
+            <button class="tmRawToggle" id="tmMraRawToggle" type="button">Show Raw Response</button>
+          </div>
+          <pre id="tmMraRawJson" class="tmHidden">${renderMraRawJson(json)}</pre>
+        </div>
+      </div>
+    `;
+
+      const rawToggle = document.getElementById('tmMraRawToggle');
+      const rawJson = document.getElementById('tmMraRawJson');
+
+      if (rawToggle && rawJson) {
+          rawToggle.addEventListener('click', () => {
+              const isHidden = rawJson.classList.toggle('tmHidden');
+              rawToggle.textContent = isHidden ? 'Show Raw Response' : 'Hide Raw Response';
+          });
+      }
+  }
+
+    function renderMraField(label, value) {
+        return `
+      <div class="tmMraKv">
+        <span>${escapeHtml(label)}</span>
+        <strong>${escapeHtml(displayValue(value))}</strong>
+      </div>
+    `;
+  }
+
+    function renderMraOperationPills(items, type) {
+        if (!items.length) {
+            return `<span class="tmMraOpPill ${type === 'nonFree' ? 'tmNonFree' : ''}">-</span>`;
+        }
+
+        return items.map(item => `
+      <span class="tmMraOpPill ${type === 'nonFree' ? 'tmNonFree' : ''}">${escapeHtml(displayValue(item))}</span>
+    `).join('');
+  }
+
+    function renderMraClaimRows(item2) {
+        if (!Array.isArray(item2) || !item2.length) {
+            return '<tr><td colspan="13">Tidak ada claim history.</td></tr>';
+        }
+
+        return item2.map((claim, index) => {
+            const freeStatus = classifyFreeStatus(claim?.mainOperationNo);
+            const statusClass = freeStatus === 'FREE SERVICE' ? 'tmBadgeFree' : 'tmBadgeNonFree';
+
+            return `
+        <tr>
+          <td class="tmNoCell">${escapeHtml(index + 1)}</td>
+          <td>${escapeHtml(displayValue(claim?.epCodeDealer))}</td>
+          <td>${escapeHtml(displayValue(claim?.claimType))}</td>
+          <td>${escapeHtml(displayValue(formatDate(claim?.deliveryDate)))}</td>
+          <td>${escapeHtml(displayValue(formatDate(claim?.repairDate)))}</td>
+          <td>${escapeHtml(displayValue(claim?.km))}</td>
+          <td>${escapeHtml(displayValue(claim?.mainOperationNo))}</td>
+          <td>${escapeHtml(displayValue(claim?.condition))}</td>
+          <td>${escapeHtml(displayValue(claim?.sourceTable))}</td>
+          <td>${escapeHtml(displayValue(formatDate(claim?.repairCompletion)))}</td>
+          <td>${escapeHtml(displayValue(claim?.punctualFlag))}</td>
+          <td>${escapeHtml(displayValue(claim?.serviceNo))}</td>
+          <td><span class="${statusClass}">${escapeHtml(freeStatus)}</span></td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+    function renderMraRawJson(json) {
+        return escapeHtml(JSON.stringify(json, null, 2));
+    }
+
+    function joinMulti(list) {
+        return list
+            .map(x => String(x ?? '').trim())
+            .filter(Boolean)
+            .join(' | ');
+    }
+
+    function firstNonEmpty(list) {
+        return list.find(x => String(x ?? '').trim()) || '';
+    }
+
+    /************************************************************
+   * RENDER FORMAT UTAMA
+   ************************************************************/
+    function renderMainResults() {
+        const tbody = document.getElementById('tmResultBody');
+        if (!tbody) return;
+
+        tbody.innerHTML = mainResults.map(row => `
+      <tr>
+        <td class="tmNoCell">${escapeHtml(row.no)}</td>
+        <td class="tmVinCell">${escapeHtml(row.vin)}</td>
+        <td>${escapeHtml(formatDate(row.deliveryDate))}</td>
+        <td>${escapeHtml(row.modelCode)}</td>
+        <td>${escapeHtml(row.modelName)}</td>
+        ${MAIN_SERVICE_OPERATIONS.map(operation => `
+          <td>${escapeHtml(displayValue(row[`repairDate${operation}`]))}</td>
+          <td><span class="${row[`service${operation}`] === '-' ? 'tmBadgeWarn' : 'tmBadgeOk'}">${escapeHtml(displayValue(row[`service${operation}`]))}</span></td>
+        `).join('')}
+      </tr>
+    `).join('');
+
+      updateListCount();
+      filterResultRows();
+  }
+
+    /************************************************************
+   * RENDER FORMAT2
+   ************************************************************/
+    function renderSummaryResults() {
+        const tbody = document.getElementById('tmResultBody');
+        if (!tbody) return;
+
+        tbody.innerHTML = summaryResults.map(row => {
+            const remainingNumber = Number(row.remainingFree);
+            const remainingClass = Number.isFinite(remainingNumber) && remainingNumber <= 0
+            ? 'tmBadgeWarn'
+            : 'tmBadgeOk';
+
+            return `
+        <tr>
+          <td class="tmNoCell">${escapeHtml(row.no)}</td>
+          <td class="tmVinCell">${escapeHtml(row.vin)}</td>
+          <td class="tmNumericCell"><span class="tmBadgeNeutral">${escapeHtml(row.claimCount)}</span></td>
+          <td class="tmNumericCell"><span class="${remainingClass}">${escapeHtml(row.remainingFree)}</span></td>
+          <td>${escapeHtml(row.modelCode)}</td>
+          <td>${escapeHtml(row.modelName)}</td>
+          <td class="tmMulti">${escapeHtml(toMultiline(row.epCodeDealer))}</td>
+          <td>${escapeHtml(formatDate(row.deliveryDate))}</td>
+          <td class="tmMulti">${escapeHtml(toMultiline(row.claimType))}</td>
+          <td class="tmMulti">${escapeHtml(toMultiline(row.repairDate))}</td>
+          <td class="tmMulti tmOperationCell">${escapeHtml(toMultiline(row.mainOperationNo))}</td>
+          <td title="${escapeHtml(row.error || row.status || '')}"><span class="tmStatusBadge">${escapeHtml(row.status)}</span></td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+    function clearTable() {
+        const tbody = document.getElementById('tmResultBody');
+        if (tbody) tbody.innerHTML = '';
+    }
+
+    function updateProgress() {
+        const total = queue.length || 0;
+        const done = Math.min(currentIndex, total);
+        const percent = total ? Math.round((done / total) * 100) : 0;
+
+        const bar = document.getElementById('tmProgressBar');
+        const counter = document.getElementById('tmCounter');
+
+        if (bar) bar.style.width = percent + '%';
+        if (counter) counter.textContent = `${done} / ${total}`;
+        updateProgressMeta(total, done);
+        updateListCount();
+    }
+
+    function resetProgressMetrics() {
+        processStartedAt = Date.now();
+        activeVinStartedAt = 0;
+        vinDurations = [];
+        totalResponseBytes = 0;
+        totalResponseRequests = 0;
+        stopProgressTimer();
+        updateProgressMeta(queue.length || 0, currentIndex || 0);
+    }
+
+    function startProgressTimer() {
+        stopProgressTimer();
+        progressTimerId = window.setInterval(updateProgress, 1000);
+    }
+
+    function stopProgressTimer() {
+        if (!progressTimerId) return;
+        window.clearInterval(progressTimerId);
+        progressTimerId = null;
+    }
+
+    function updateProgressMeta(total, done) {
+        const etaEl = document.getElementById('tmProgressEta');
+        const sizeEl = document.getElementById('tmProgressSize');
+
+        if (etaEl) {
+            etaEl.textContent = buildProgressEstimateText(total, done);
+        }
+
+        if (sizeEl) {
+            sizeEl.textContent = `Data dimuat: ${formatBytes(totalResponseBytes)} (${totalResponseRequests} request)`;
+        }
+    }
+
+    function buildProgressEstimateText(total, done) {
+        if (!total) return 'Estimasi: -';
+
+        const elapsedMs = processStartedAt ? Math.max(Date.now() - processStartedAt, 0) : 0;
+        const averageMs = getCurrentAverageVinMs();
+
+        if (done >= total) {
+            return `Selesai dalam ${formatDuration(elapsedMs)}`;
+        }
+
+        if (!averageMs) {
+            return `Estimasi: menghitung... (${done}/${total})`;
+        }
+
+        const remaining = Math.max(total - done, 0);
+        const etaMs = Math.max(Math.round(averageMs * remaining), 0);
+
+        return `Estimasi: ${formatDuration(etaMs)} tersisa | Rata-rata ${formatDuration(averageMs)} / VIN`;
+    }
+
+    function getCurrentAverageVinMs() {
+        const durations = vinDurations.slice();
+
+        if (activeVinStartedAt) {
+            durations.push(Math.max(Date.now() - activeVinStartedAt, 0));
+        }
+
+        if (!durations.length) return 0;
+
+        return durations.reduce((sum, value) => sum + value, 0) / durations.length;
+    }
+
+    function recordResponseSize(text) {
+        totalResponseBytes += getTextByteSize(text);
+        totalResponseRequests++;
+        updateProgress();
+    }
+
+    function getTextByteSize(text) {
+        const str = String(text ?? '');
+
+        try {
+            return new Blob([str]).size;
+        } catch (_) {
+            return str.length;
+        }
+    }
+
+    function formatBytes(bytes) {
+        const value = Number(bytes) || 0;
+
+        if (value < 1024) return `${value} B`;
+        if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+
+        return `${(value / (1024 * 1024)).toFixed(2)} MB`;
+    }
+
+    function formatDuration(ms) {
+        const totalSeconds = Math.max(0, Math.round((Number(ms) || 0) / 1000));
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+
+        if (minutes <= 0) return `${seconds}s`;
+        return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
+    }
+
+    function updateAuthStatus() {
+        const el = document.getElementById('tmAuthStatus');
+        if (!el) return;
+
+        if (capturedAuthorization) {
+            el.textContent = 'Session/token aktif injected.';
+            el.classList.add('tmStatusOk');
+            el.classList.remove('tmStatusWarn');
+        } else {
+            el.textContent = 'Token belum ditemukan.';
+            el.classList.add('tmStatusWarn');
+            el.classList.remove('tmStatusOk');
+        }
+    }
+
+    function logTerminal(message, type = 'info') {
+        const term = document.getElementById('tmTerminal');
+        if (!term) return;
+
+        const time = new Date().toLocaleTimeString();
+        const div = document.createElement('div');
+
+        const cls = {
+            info: 'tmLogInfo',
+            warn: 'tmLogWarn',
+            error: 'tmLogErr',
+            success: 'tmLogSuccess'
+        }[type] || 'tmLogInfo';
+
+        const semanticCls = getLogSemanticClass(message, type);
+        div.className = semanticCls ? `${cls} ${semanticCls}` : cls;
+        div.textContent = `[${time}] ${message}`;
+
+        term.appendChild(div);
+        term.scrollTop = term.scrollHeight;
+    }
+
+    function getLogSemanticClass(message, type) {
+        const text = String(message || '').toLowerCase();
+
+        if (type === 'error' || text.includes('error') || text.includes('gagal')) {
+            return 'tmLogErr';
+        }
+
+        if (text.includes('kandidat') || text.includes('split vin berhasil') || text.includes('lookup vds menemukan')) {
+            return 'tmLogCandidate';
+        }
+
+        if (text.includes('request vin') || text.includes('mencari vin') || text.includes('mulai pencarian') || text.includes('mulai proses')) {
+            return 'tmLogSearch';
+        }
+
+        return '';
+    }
+
+    /************************************************************
+   * EXPORT FORMAT UTAMA
+   ************************************************************/
+    function exportMainCSV() {
+        if (!mainResults.length) {
+            logTerminal('Tidak ada data Format Utama untuk diexport.', 'warn');
+            return;
+        }
+
+        downloadCSV(getMainCSVHeaders(), mainResults, 'claim-detail-format-utama');
+        logTerminal(`CSV Format Utama diexport. Total baris: ${mainResults.length}.`, 'success');
+    }
+
+    function getMainCSVHeaders() {
+        const headers = [
+            { label: 'No', key: 'no' },
+            { label: 'VIN', key: 'vin' },
+            { label: 'deliveryDate', key: 'deliveryDate' },
+            { label: 'modelCode', key: 'modelCode' },
+            { label: 'modelName', key: 'modelName' }
+        ];
+
+        for (const operation of MAIN_SERVICE_OPERATIONS) {
+            headers.push(
+                { label: 'RepairDate', key: `repairDate${operation}` },
+                { label: operation, key: `service${operation}` }
+            );
+        }
+
+        return headers;
+    }
+
+    /************************************************************
+   * EXPORT FORMAT1 DETAIL
+   ************************************************************/
+    function exportFormat1CSV() {
+        if (!detailResults.length) {
+            logTerminal('Tidak ada data Format1 untuk diexport.', 'warn');
+            return;
+        }
+
+        const headers = [
+            'no',
+            'vin',
+            'modelCode',
+            'modelName',
+            'epCodeDealer',
+            'claimType',
+            'deliveryDate',
+            'repairDate',
+            'km',
+            'mainOperationNo',
+            'condition',
+            'serviceNo',
+            'status',
+            'error'
+        ];
+
+        downloadCSV(headers, detailResults, 'claim-detail-format1-detail');
+        logTerminal(`CSV Format1 Detail diexport. Total baris: ${detailResults.length}.`, 'success');
+    }
+
+    /************************************************************
+   * EXPORT FORMAT2 SUMMARY
+   ************************************************************/
+    function exportFormat2CSV() {
+        if (!summaryResults.length) {
+            logTerminal('Tidak ada data Format2 untuk diexport.', 'warn');
+            return;
+        }
+
+        const headers = [
+            'no',
+            'vin',
+            'claimCount',
+            'remainingFree',
+            'modelCode',
+            'modelName',
+            'epCodeDealer',
+            'deliveryDate',
+            'claimType',
+            'repairDate',
+            'mainOperationNo',
+            'status',
+            'error'
+        ];
+
+        downloadCSV(headers, summaryResults, 'claim-detail-format2-summary');
+        logTerminal(`CSV Format2 Summary diexport. Total baris: ${summaryResults.length}.`, 'success');
+    }
+
+    function downloadCSV(headers, rows, filenamePrefix) {
+        const normalizedHeaders = headers.map(header => {
+            if (typeof header === 'string') {
+                return { label: header, key: header };
+            }
+
+            return header;
+        });
+
+        const csv = [
+            normalizedHeaders.map(header => header.label).join(','),
+            ...rows.map(row => {
+                return normalizedHeaders.map(header => csvEscape(formatCSVValue(header, row[header.key] ?? ''))).join(',');
+            })
+        ].join('\r\n');
+
+        const blob = new Blob(['\uFEFF' + csv], {
+            type: 'text/csv;charset=utf-8;'
+        });
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+
+        const ts = new Date()
+        .toISOString()
+        .replace(/[:.]/g, '-')
+        .slice(0, 19);
+
+        a.href = url;
+        a.download = `${filenamePrefix}-${ts}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+
+        URL.revokeObjectURL(url);
+    }
+
+    /************************************************************
+   * HELPERS
+   ************************************************************/
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+    }
+
+    function csvEscape(value) {
+        const str = String(value ?? '');
+        return `"${str.replaceAll('"', '""')}"`;
+    }
+
+    function formatCSVValue(header, value) {
+        const key = String(header?.key || '').toLowerCase();
+        const label = String(header?.label || '').toLowerCase();
+
+        if (key.includes('date') || label.includes('date') || key.includes('completion')) {
+            return formatDate(value);
+        }
+
+        return value;
+    }
+
+    function formatDate(value) {
+        if (value === null || value === undefined || value === '') return '';
+
+        if (value instanceof Date && !Number.isNaN(value.getTime())) {
+            return formatDateParts(value.getFullYear(), value.getMonth() + 1, value.getDate());
+        }
+
+        const str = String(value).trim();
+        const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?$/);
+
+        if (isoMatch) {
+            return `${isoMatch[3]}-${isoMatch[2]}-${isoMatch[1]}`;
+        }
+
+        const compactMatch = str.match(/^(\d{4})\/(\d{2})\/(\d{2})(?:[T\s].*)?$/);
+
+        if (compactMatch) {
+            return `${compactMatch[3]}-${compactMatch[2]}-${compactMatch[1]}`;
+        }
+
+        return str;
+    }
+
+    function formatDateParts(year, month, day) {
+        return [
+            String(day).padStart(2, '0'),
+            String(month).padStart(2, '0'),
+            String(year)
+        ].join('-');
+    }
+
+    function displayValue(value) {
+        if (value === null || value === undefined || value === '') return '-';
+        if (typeof value === 'boolean') return value ? 'true' : 'false';
+        return String(value);
+    }
+
+    function toMultiline(value) {
+        return String(value ?? '').replaceAll(' | ', '\n');
+    }
+
+    /************************************************************
+   * CRM-LIKE FULLSCREEN UI OVERRIDE
+   ************************************************************/
+    function injectUI() {
+        const style = document.createElement('style');
+        style.textContent = `
+      html,
+      body {
+        margin: 0 !important;
+        overflow: hidden !important;
+      }
+
+      #tmClaimPanel {
+        --tm-bg: #f7f9fd;
+        --tm-surface: #ffffff;
+        --tm-line: #e8edf5;
+        --tm-soft: #f5f7fb;
+        --tm-ink: #35415a;
+        --tm-muted: #7c879a;
+        --tm-blue: #2469df;
+        --tm-blue-soft: #eef4ff;
+        --tm-red: #e94b5f;
+        --tm-green: #20b486;
+        position: fixed;
+        inset: 0;
+        z-index: 999999;
+        display: grid;
+        grid-template-rows: 58px 54px 78px minmax(0, 1fr);
+        color: var(--tm-ink);
+        background: var(--tm-bg);
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: geometricPrecision;
+      }
+
+      #tmClaimPanel * {
+        box-sizing: border-box;
+      }
+
+      #tmClaimHeader {
+        display: grid;
+        grid-template-columns: 260px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 20px;
+        padding: 0 22px;
+        background: #fff;
+        border-bottom: 1px solid var(--tm-line);
+      }
+
+      .tmBrand {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+
+      .tmBrandMark {
+        width: 28px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #5b6475;
+      }
+
+      .tmBrandMark svg {
+        width: 27px;
+        height: 27px;
+      }
+
+      #tmClaimHeaderTitle {
+        color: #30394d;
+        font-size: 15px;
+        font-weight: 900;
+        letter-spacing: 0;
+        white-space: nowrap;
+      }
+
+      #tmClaimHeaderSub {
+        display: none;
+      }
+
+      .tmTopNav {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 34px;
+        min-width: 0;
+        color: #4a566d;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .tmTopNav span,
+      .tmTopActions span {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        white-space: nowrap;
+      }
+
+      .tmTopIcon {
+        width: 16px;
+        height: 16px;
+        display: inline-block;
+        color: #536178;
+      }
+
+      .tmTopActions {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        color: #253650;
+      }
+
+      .tmAvatar {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background:
+          linear-gradient(135deg, rgba(36,105,223,.95), rgba(32,180,134,.75)),
+          #dbe7ff;
+        box-shadow: inset 0 0 0 2px #fff;
+      }
+
+      .tmPageHeader {
+        display: grid;
+        grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
+        align-items: center;
+        padding: 0 22px;
+        background: #fff;
+        border-bottom: 1px solid var(--tm-line);
+      }
+
+      .tmPageTitle {
+        min-width: 0;
+        color: #3c4660;
+        font-size: 24px;
+        font-weight: 500;
+        letter-spacing: 0;
+        line-height: 1;
+      }
+
+      .tmPageTitle strong {
+        font-weight: 650;
+      }
+
+      .tmViewSwitch {
+        display: flex;
+        align-items: center;
+        gap: 0;
+        background: #f3f6fb;
+      }
+
+      .tmTabBtn {
+        height: 32px;
+        min-width: 104px;
+        border: 0;
+        border-radius: 0;
+        color: #97a1b1;
+        background: transparent;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 750;
+        letter-spacing: 0;
+      }
+
+      .tmTabBtn.active {
+        color: var(--tm-blue);
+        background: #eef3fb;
+        box-shadow: inset 0 0 0 1px #edf1f8;
+      }
+
+      .tmPageActions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      .tmPrimaryBtn,
+      .tmActionBtn,
+      .tmSoftBtn {
+        height: 36px;
+        border: 1px solid transparent;
+        border-radius: 0;
+        padding: 0 16px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 750;
+        letter-spacing: 0;
+      }
+
+      .tmPrimaryBtn {
+        color: #fff;
+        background: var(--tm-blue);
+        box-shadow: 0 8px 18px rgba(36,105,223,.18);
+      }
+
+      .tmActionBtn {
+        color: #49617e;
+        background: #f0f4ff;
+      }
+
+      .tmSoftBtn {
+        color: #5a6678;
+        background: #fff;
+        border-color: var(--tm-line);
+      }
+
+      .tmFiltersBar {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(104px, 136px)) 118px minmax(230px, 1fr) 132px;
+        align-items: center;
+        gap: 20px;
+        padding: 18px 22px;
+        background: #fff;
+        border-bottom: 1px solid var(--tm-line);
+      }
+
+      .tmFilterBox {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        height: 32px;
+        border: 1px solid var(--tm-line);
+        background: #fff;
+      }
+
+      .tmFilterBox label {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 54px;
+        padding: 0 10px;
+        color: #68758b;
+        border-right: 1px solid var(--tm-line);
+        font-size: 11px;
+        font-weight: 850;
+        text-transform: uppercase;
+      }
+
+      .tmFilterBox input,
+      .tmSearchBox input,
+      #tmEpCodeInput {
+        width: 100%;
+        min-width: 0;
+        border: 0;
+        outline: 0;
+        color: #35415a;
+        background: transparent;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .tmFilterBox input {
+        padding: 0 10px;
+        text-transform: uppercase;
+      }
+
+      .tmSearchBox {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 38px;
+        height: 32px;
+        border: 1px solid var(--tm-line);
+        background: #fff;
+      }
+
+      .tmSearchBox input {
+        padding: 0 12px;
+        color: #68758b;
+        font-weight: 650;
+      }
+
+      .tmSearchBox span {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #6d7a91;
+      }
+
+      #tmMainContent {
+        min-height: 0;
+        background: #fff;
+      }
+
+      .tmTabContent {
+        height: 100%;
+        min-height: 0;
+        display: none;
+        overflow: hidden;
+      }
+
+      .tmTabContent.active {
+        display: block;
+      }
+
+      #tmTabHasil.active {
+        display: grid;
+        grid-template-rows: 4px minmax(0, 1fr);
+      }
+
+      #tmProgressWrap {
+        height: 4px;
+        background: #eef2f8;
+      }
+
+      #tmProgressBar {
+        width: 0%;
+        height: 100%;
+        background: var(--tm-blue);
+        transition: width .24s ease;
+      }
+
+      #tmResultWrap {
+        min-height: 0;
+        overflow: auto;
+        background: #fff;
+      }
+
+      #tmResultTable {
+        width: 100%;
+        min-width: 1320px;
+        border-collapse: separate;
+        border-spacing: 0;
+        color: #4d596f;
+        font-size: 13px;
+      }
+
+      #tmResultTable thead {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+      }
+
+      #tmResultTable th,
+      #tmResultTable td {
+        height: 52px;
+        padding: 0 14px;
+        border-right: 1px solid #f0f2f6;
+        border-bottom: 1px solid #f0f2f6;
+        text-align: left;
+        vertical-align: middle;
+        white-space: nowrap;
+      }
+
+      #tmResultTable th {
+        height: 42px;
+        color: #657187;
+        background: #fbfcfe;
+        font-size: 11px;
+        font-weight: 850;
+        text-transform: uppercase;
+      }
+
+      #tmResultTable tbody tr:hover {
+        background: #fbfdff;
+      }
+
+      #tmResultTable td.tmNoCell {
+        width: 56px;
+        color: #a5adbb;
+        font-variant-numeric: tabular-nums;
+      }
+
+      #tmResultTable td.tmVinCell {
+        color: #1d63c8;
+        font-weight: 850;
+      }
+
+      .tmBadgeOk,
+      .tmBadgeWarn,
+      .tmBadgeNeutral,
+      .tmStatusBadge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 34px;
+        height: 24px;
+        padding: 0 9px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 850;
+        line-height: 1;
+      }
+
+      .tmBadgeOk {
+        color: #129b72;
+        background: #effbf7;
+        border: 1px solid #d9f4ec;
+      }
+
+      .tmBadgeWarn {
+        color: #d04c5c;
+        background: #fff4f6;
+        border: 1px solid #ffe2e8;
+      }
+
+      .tmBadgeNeutral,
+      .tmStatusBadge {
+        color: #2469df;
+        background: #f0f5ff;
+        border: 1px solid #dfe9ff;
+      }
+
+      #tmTabInput {
+        overflow: auto;
+        background: var(--tm-bg);
+        padding: 20px 22px;
+      }
+
+      .tmInputLayout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 320px;
+        gap: 18px;
+        height: 100%;
+        min-height: 0;
+      }
+
+      .tmInputPanel,
+      .tmSidePanel {
+        background: #fff;
+        border: 1px solid var(--tm-line);
+      }
+
+      .tmInputPanel {
+        min-height: 0;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+      }
+
+      .tmPanelHead {
+        padding: 16px 18px;
+        border-bottom: 1px solid var(--tm-line);
+      }
+
+      .tmPanelHead strong {
+        display: block;
+        color: #3c4660;
+        font-size: 14px;
+        font-weight: 850;
+      }
+
+      .tmPanelHead span {
+        display: block;
+        margin-top: 4px;
+        color: #7f899a;
+        font-size: 12px;
+      }
+
+      #tmVinInput {
+        width: 100%;
+        height: 100%;
+        min-height: 360px;
+        resize: none;
+        border: 0;
+        outline: 0;
+        padding: 16px 18px;
+        color: #35415a;
+        background: #fff;
+        font-family: "Cascadia Code", Consolas, monospace;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .tmSidePanel {
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .tmMiniLabel {
+        color: #657187;
+        font-size: 11px;
+        font-weight: 850;
+        text-transform: uppercase;
+      }
+
+      #tmEpCodeInput {
+        height: 34px;
+        padding: 0 10px;
+        border: 1px solid var(--tm-line);
+        background: #fff;
+      }
+
+      #tmAuthStatus,
+      #tmCounter {
+        min-height: 32px;
+        display: inline-flex;
+        align-items: center;
+        padding: 0 10px;
+        border: 1px solid var(--tm-line);
+        color: #657187;
+        background: #fbfcfe;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      #tmAuthStatus.tmStatusOk {
+        color: #128563;
+        background: #effbf7;
+        border-color: #d9f4ec;
+      }
+
+      #tmAuthStatus.tmStatusWarn {
+        color: #a66a00;
+        background: #fff8eb;
+        border-color: #ffedcc;
+      }
+
+      .tmBtnGrid,
+      .tmExportStack {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .tmBtnGrid button,
+      .tmExportStack button {
+        height: 34px;
+        border: 1px solid var(--tm-line);
+        background: #fff;
+        color: #4d596f;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .tmBtnGrid #tmStartBulkBtn {
+        color: #fff;
+        background: var(--tm-blue);
+        border-color: var(--tm-blue);
+      }
+
+      .tmHelpBox {
+        margin-top: auto;
+        color: #7f899a;
+        font-size: 12px;
+        line-height: 1.55;
+      }
+
+      #tmTabTerminal {
+        background: #fbfcfe;
+      }
+
+      #tmTerminal {
+        height: 100%;
+        overflow: auto;
+        padding: 16px 22px;
+        color: #4d596f;
+        font-family: "Cascadia Code", Consolas, monospace;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      #tmTerminal > div {
+        padding: 7px 0;
+        border-bottom: 1px solid #eef2f8;
+      }
+
+      .tmLogWarn { color: #a66a00; }
+      .tmLogErr { color: #c93a4c; }
+      .tmLogSuccess { color: #128563; }
+      .tmHidden { display: none !important; }
+
+      @media (max-width: 980px) {
+        #tmClaimPanel {
+          grid-template-rows: 58px auto auto minmax(0, 1fr);
+        }
+
+        #tmClaimHeader {
+          grid-template-columns: 1fr auto;
+        }
+
+        .tmTopNav {
+          display: none;
+        }
+
+        .tmPageHeader {
+          grid-template-columns: 1fr;
+          gap: 10px;
+          padding: 12px 16px;
+        }
+
+        .tmPageActions {
+          justify-content: flex-start;
+        }
+
+        .tmFiltersBar {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+          padding: 12px 16px;
+        }
+
+        .tmInputLayout {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      /* Modern readability polish: visual-only overrides, no behavior changes. */
+      #tmClaimPanel {
+        --tm-bg: #f8fafc;
+        --tm-surface: #ffffff;
+        --tm-line: #e2e8f0;
+        --tm-line-strong: #cbd5e1;
+        --tm-ink: #111827;
+        --tm-ink-soft: #172033;
+        --tm-muted: #4b5563;
+        --tm-helper: #6b7280;
+        --tm-blue: #2563eb;
+        --tm-blue-hover: #1d4ed8;
+        --tm-blue-soft: #eff6ff;
+        --tm-warn-bg: #fff7ed;
+        --tm-warn-line: #fdba74;
+        --tm-warn-text: #9a3412;
+        grid-template-rows: 64px 72px 88px minmax(0, 1fr);
+        color: var(--tm-ink);
+        background: var(--tm-bg);
+        font-size: 14px;
+      }
+
+      #tmClaimHeader {
+        padding: 0 24px;
+        background: #ffffff;
+        border-bottom: 1px solid var(--tm-line);
+        box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+      }
+
+      .tmBrandMark {
+        width: 52px;
+        height: 34px;
+        color: #eb0a1e;
+      }
+
+      .tmBrandMark svg {
+        width: 52px;
+        height: 34px;
+      }
+
+      #tmClaimHeaderTitle {
+        color: var(--tm-ink);
+        font-size: 17px;
+        font-weight: 800;
+      }
+
+      .tmTopNav {
+        color: #1f2937;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .tmTopNav span {
+        position: relative;
+        height: 64px;
+        color: #374151;
+      }
+
+      .tmTopNav span:nth-child(2) {
+        color: var(--tm-blue);
+      }
+
+      .tmTopNav span:nth-child(2)::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 3px;
+        background: var(--tm-blue);
+        border-radius: 999px 999px 0 0;
+      }
+
+      .tmTopNav .tmNavDisabled {
+        color: #9ca3af;
+        opacity: .72;
+      }
+
+      .tmTopNav .tmNavDisabled .tmTopIcon {
+        color: #9ca3af;
+      }
+
+      .tmTopNav .tmNavDisabled:hover {
+        color: #6b7280;
+      }
+
+      .tmTopNav .tmNavDisabled:hover .tmTopIcon {
+        color: #6b7280;
+      }
+
+      .tmTopIcon,
+      .tmTopActions {
+        color: #374151;
+      }
+
+      .tmPageHeader {
+        padding: 0 24px;
+        background: #ffffff;
+        border-bottom: 1px solid var(--tm-line);
+      }
+
+      .tmPageTitle {
+        color: var(--tm-ink);
+        font-size: 26px;
+        font-weight: 700;
+      }
+
+      .tmPageTitle strong {
+        font-weight: 800;
+      }
+
+      .tmViewSwitch {
+        gap: 4px;
+        padding: 4px;
+        background: #eef2f7;
+        border: 1px solid var(--tm-line);
+        border-radius: 10px;
+      }
+
+      .tmTabBtn {
+        height: 40px;
+        min-width: 116px;
+        border-radius: 8px;
+        color: #374151;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .tmTabBtn.active {
+        color: var(--tm-blue);
+        background: #ffffff;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, .1), inset 0 0 0 1px rgba(37, 99, 235, .16);
+      }
+
+      .tmPrimaryBtn,
+      .tmActionBtn,
+      .tmSoftBtn {
+        height: 42px;
+        border-radius: 8px;
+        padding: 0 18px;
+        font-size: 14px;
+        font-weight: 700;
+        transition: background .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .16s ease;
+      }
+
+      .tmPrimaryBtn,
+      .tmBtnGrid #tmStartBulkBtn {
+        color: #ffffff;
+        background: var(--tm-blue);
+        border-color: var(--tm-blue);
+        box-shadow: 0 8px 18px rgba(37, 99, 235, .18);
+      }
+
+      .tmPrimaryBtn:hover,
+      .tmBtnGrid #tmStartBulkBtn:hover {
+        background: var(--tm-blue-hover);
+        border-color: var(--tm-blue-hover);
+        transform: translateY(-1px);
+      }
+
+      .tmActionBtn,
+      .tmSoftBtn,
+      .tmBtnGrid button {
+        color: #1f2937;
+        background: #ffffff;
+        border-color: var(--tm-line-strong);
+      }
+
+      .tmActionBtn:hover,
+      .tmSoftBtn:hover,
+      .tmBtnGrid button:hover {
+        color: var(--tm-blue);
+        border-color: #93c5fd;
+        background: #f8fbff;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, .08);
+      }
+
+      .tmFiltersBar {
+        grid-template-columns: repeat(4, minmax(128px, 160px)) 132px minmax(260px, 1fr) 144px;
+        gap: 16px;
+        padding: 20px 24px;
+        background: #ffffff;
+        border-bottom: 1px solid var(--tm-line);
+        box-shadow: 0 1px 2px rgba(15, 23, 42, .03);
+      }
+
+      .tmFilterBox {
+        height: 44px;
+        border-color: var(--tm-line-strong);
+        border-radius: 8px;
+        overflow: hidden;
+        background: #ffffff;
+      }
+
+      .tmFilterBox:focus-within,
+      .tmSearchBox:focus-within,
+      #tmEpCodeInput:focus,
+      #tmVinInput:focus {
+        border-color: var(--tm-blue);
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, .14);
+      }
+
+      .tmFilterBox label {
+        min-width: 58px;
+        color: var(--tm-ink-soft);
+        background: #f8fafc;
+        border-right-color: var(--tm-line);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .tmFilterBox input,
+      .tmSearchBox input,
+      #tmEpCodeInput {
+        color: var(--tm-ink);
+        font-size: 15px;
+        font-weight: 700;
+      }
+
+      .tmFilterBox input::placeholder,
+      .tmSearchBox input::placeholder,
+      #tmVinInput::placeholder {
+        color: #94a3b8;
+      }
+
+      .tmSearchBox {
+        height: 44px;
+        border-color: var(--tm-line-strong);
+        border-radius: 8px;
+        background: #ffffff;
+      }
+
+      .tmSearchBox input {
+        padding: 0 14px;
+      }
+
+      #tmMainContent {
+        min-height: 0;
+        background: var(--tm-bg);
+      }
+
+      #tmTabHasil.active {
+        grid-template-rows: auto minmax(0, 1fr);
+        padding: 0 24px 24px;
+        background: var(--tm-bg);
+      }
+
+      .tmProgressSection {
+        display: grid;
+        gap: 8px;
+        padding-top: 14px;
+      }
+
+      #tmProgressWrap {
+        margin: 0;
+        height: 8px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: #e5e7eb;
+      }
+
+      #tmProgressBar {
+        background: linear-gradient(90deg, var(--tm-blue), #38bdf8);
+      }
+
+      .tmProgressMeta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        color: #4b5563;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .tmProgressMeta span {
+        overflow-wrap: anywhere;
+      }
+
+      #tmResultWrap {
+        min-height: 0;
+        margin-top: 20px;
+        border: 1px solid var(--tm-line);
+        border-radius: 12px;
+        background: #ffffff;
+        box-shadow: 0 12px 30px rgba(15, 23, 42, .06);
+      }
+
+      #tmResultTable {
+        color: #1f2937;
+        font-size: 14px;
+      }
+
+      #tmResultTable th,
+      #tmResultTable td {
+        height: 56px;
+        padding: 0 16px;
+        border-color: #edf2f7;
+      }
+
+      #tmResultTable th {
+        height: 46px;
+        color: #374151;
+        background: #f8fafc;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      #tmResultTable td.tmNoCell {
+        color: #4b5563;
+        font-weight: 700;
+      }
+
+      #tmResultTable td.tmVinCell {
+        color: var(--tm-blue);
+        font-weight: 800;
+      }
+
+      #tmResultTable tbody tr:hover {
+        background: #f8fbff;
+      }
+
+      .tmBadgeOk,
+      .tmBadgeWarn,
+      .tmBadgeNeutral,
+      .tmStatusBadge {
+        min-height: 26px;
+        height: 26px;
+        padding: 0 10px;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .tmBadgeOk {
+        color: #047857;
+        background: #ecfdf5;
+        border-color: #a7f3d0;
+      }
+
+      .tmBadgeWarn {
+        color: #b91c1c;
+        background: #fef2f2;
+        border-color: #fecaca;
+      }
+
+      #tmTabInput {
+        padding: 24px;
+        background: var(--tm-bg);
+      }
+
+      .tmInputLayout {
+        grid-template-columns: minmax(0, 1fr) 344px;
+        gap: 24px;
+      }
+
+      .tmInputPanel,
+      .tmSidePanel {
+        border-color: var(--tm-line);
+        border-radius: 12px;
+        background: #ffffff;
+        box-shadow: 0 12px 30px rgba(15, 23, 42, .06);
+      }
+
+      .tmPanelHead {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 20px;
+        border-bottom-color: var(--tm-line);
+        background: #ffffff;
+      }
+
+      .tmPanelHead > div {
+        min-width: 0;
+      }
+
+      .tmPanelHead strong {
+        color: var(--tm-ink);
+        font-size: 18px;
+        font-weight: 800;
+      }
+
+      .tmPanelHead span,
+      .tmHelpBox {
+        color: var(--tm-helper);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .tmPanelHead .tmVinCountBadge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 30px;
+        padding: 6px 10px;
+        color: var(--tm-blue);
+        background: var(--tm-blue-soft);
+        border: 1px solid #bfdbfe;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      #tmVinInput {
+        min-height: 420px;
+        padding: 18px 20px;
+        color: var(--tm-ink);
+        background: #fcfcfd;
+        font-size: 15px;
+        line-height: 1.7;
+      }
+
+      .tmSidePanel {
+        position: sticky;
+        top: 16px;
+        align-self: start;
+        padding: 18px;
+        gap: 14px;
+      }
+
+      .tmMiniLabel {
+        margin-bottom: 8px;
+        color: var(--tm-ink-soft);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      #tmEpCodeInput {
+        height: 42px;
+        padding: 0 12px;
+        border: 1px solid var(--tm-line-strong);
+        border-radius: 8px;
+        color: var(--tm-ink);
+        background: #ffffff;
+        font-size: 15px;
+        font-weight: 700;
+      }
+
+      .tmBtnGrid {
+        gap: 10px;
+      }
+
+      .tmBtnGrid button {
+        height: 40px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      #tmAuthStatus,
+      #tmCounter {
+        min-height: 40px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 800;
+      }
+
+      #tmAuthStatus.tmStatusWarn {
+        color: var(--tm-warn-text);
+        background: var(--tm-warn-bg);
+        border-color: var(--tm-warn-line);
+      }
+
+      #tmAuthStatus.tmStatusOk {
+        color: #065f46;
+        background: #ecfdf5;
+        border-color: #86efac;
+      }
+
+      #tmCounter {
+        color: var(--tm-ink);
+        background: #f8fafc;
+        border-color: var(--tm-line-strong);
+        font-size: 16px;
+      }
+
+      #tmTerminal {
+        padding: 20px 24px;
+        color: var(--tm-ink);
+        font-size: 13px;
+        line-height: 1.65;
+      }
+
+      #tmTerminal > div {
+        margin-bottom: 8px;
+        padding: 10px 12px;
+        border: 1px solid var(--tm-line);
+        border-left: 4px solid #cbd5e1;
+        border-radius: 8px;
+        background: #ffffff;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+      }
+
+      .tmLogInfo {
+        color: #1f2937;
+      }
+
+      .tmLogSearch {
+        color: #1d4ed8;
+        background: #eff6ff !important;
+        border-left-color: #3b82f6 !important;
+      }
+
+      .tmLogCandidate {
+        color: #9a3412;
+        background: #fff7ed !important;
+        border-left-color: #f97316 !important;
+      }
+
+      .tmLogWarn {
+        color: #92400e;
+        background: #fffbeb !important;
+        border-left-color: #f59e0b !important;
+      }
+
+      .tmLogErr {
+        color: #991b1b;
+        background: #fef2f2 !important;
+        border-left-color: #ef4444 !important;
+      }
+
+      .tmLogSuccess {
+        color: #065f46;
+        background: #ecfdf5 !important;
+        border-left-color: #10b981 !important;
+      }
+
+      html.tmClaimUiHidden,
+      html.tmClaimUiHidden body {
+        overflow: auto !important;
+      }
+
+      #tmClaimPanel {
+        transition: opacity .16s ease, transform .16s ease, visibility .16s ease;
+      }
+
+      #tmClaimPanel.tmUiHidden {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transform: translateY(8px);
+      }
+
+      .tmDummyAction {
+        cursor: pointer;
+      }
+
+      .tmDummyAction:hover {
+        color: var(--tm-blue);
+      }
+
+      .tmDummyAction:focus-visible {
+        outline: 3px solid rgba(37, 99, 235, .18);
+        outline-offset: 3px;
+        border-radius: 8px;
+      }
+
+      #tmClaimToastHost {
+        position: fixed;
+        right: 24px;
+        bottom: 24px;
+        z-index: 1000001;
+        display: grid;
+        gap: 10px;
+        width: min(360px, calc(100vw - 32px));
+        pointer-events: none;
+      }
+
+      .tmToast {
+        padding: 12px 14px;
+        color: #111827;
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        border-left: 4px solid var(--tm-blue);
+        border-radius: 10px;
+        box-shadow: 0 16px 36px rgba(15, 23, 42, .16);
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.45;
+        opacity: 0;
+        transform: translateY(10px);
+        transition: opacity .18s ease, transform .18s ease;
+      }
+
+      .tmToast.show {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      @media (max-width: 980px) {
+        #tmClaimPanel {
+          grid-template-rows: 64px auto auto minmax(0, 1fr);
+        }
+
+        .tmPageHeader,
+        .tmFiltersBar,
+        #tmTabInput {
+          padding-left: 16px;
+          padding-right: 16px;
+        }
+
+        .tmFiltersBar {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .tmInputLayout {
+          grid-template-columns: 1fr;
+        }
+      }
+    `;
+
+      document.documentElement.appendChild(style);
+
+      const panel = document.createElement('div');
+      panel.id = 'tmClaimPanel';
+      panel.innerHTML = `
+      <div id="tmClaimHeader">
+        <div class="tmBrand">
+          <div class="tmBrandMark" aria-hidden="true">
+            <?xml version="1.0" encoding="utf-8"?>
+<svg viewBox="0 0 60 39" xmlns="http://www.w3.org/2000/svg">
+  <path style=" stroke:none;fill-rule:nonzero;fill:#282830;fill-opacity:1;" d="M 30 0.269531 C 13.585938 0.269531 0.277344 8.878906 0.277344 19.496094 C 0.277344 30.117188 13.585938 38.730469 30 38.730469 C 46.414062 38.730469 59.722656 30.121094 59.722656 19.496094 C 59.722656 8.871094 46.414062 0.269531 30 0.269531 Z M 30 30.476562 C 27.558594 30.476562 25.566406 25.667969 25.441406 19.617188 C 26.910156 19.746094 28.4375 19.816406 30 19.816406 C 31.5625 19.816406 33.089844 19.746094 34.558594 19.617188 C 34.433594 25.664062 32.441406 30.476562 30 30.476562 Z M 25.742188 14.8125 C 26.40625 10.535156 28.0625 7.5 30 7.5 C 31.9375 7.5 33.59375 10.535156 34.257812 14.8125 C 32.894531 14.933594 31.472656 15 30 15 C 28.527344 15 27.105469 14.933594 25.742188 14.8125 Z M 30 3.050781 C 26.8125 3.050781 24.09375 7.824219 23.089844 14.488281 C 17.046875 13.546875 12.828125 11.398438 12.828125 8.902344 C 12.828125 5.535156 20.515625 2.804688 30 2.804688 C 39.484375 2.804688 47.171875 5.535156 47.171875 8.902344 C 47.171875 11.398438 42.953125 13.546875 36.910156 14.488281 C 35.90625 7.824219 33.1875 3.050781 30 3.050781 Z M 4.539062 18.777344 C 4.539062 15.519531 5.792969 12.460938 7.976562 9.835938 C 7.953125 10.019531 7.9375 10.207031 7.9375 10.394531 C 7.9375 14.5 14.09375 18 22.683594 19.289062 C 22.675781 19.585938 22.675781 19.886719 22.675781 20.1875 C 22.675781 27.839844 24.820312 34.320312 27.785156 36.519531 C 14.757812 35.734375 4.539062 28.089844 4.539062 18.777344 Z M 32.214844 36.519531 C 35.179688 34.320312 37.324219 27.839844 37.324219 20.1875 C 37.324219 19.882812 37.320312 19.585938 37.316406 19.289062 C 45.902344 18 52.0625 14.503906 52.0625 10.394531 C 52.0625 10.207031 52.046875 10.019531 52.023438 9.835938 C 54.207031 12.46875 55.460938 15.519531 55.460938 18.777344 C 55.460938 28.089844 45.242188 35.734375 32.214844 36.519531 Z M 32.214844 36.519531 "/>
+</svg>
+          </div>
+          <div>
+            <div id="tmClaimHeaderTitle">Toyota Claim Finder</div>
+            <div id="tmClaimHeaderSub">Passport TCARE</div>
+          </div>
+        </div>
+
+        <nav class="tmTopNav" aria-label="Main navigation">
+          <span class="tmDummyAction tmNavDisabled" role="button" tabindex="0" data-dummy-action="Dashboard"><svg class="tmTopIcon" viewBox="0 0 24 24" fill="none"><path d="M4 4h6v6H4V4Zm10 0h6v6h-6V4ZM4 14h6v6H4v-6Zm10 0h6v6h-6v-6Z" stroke="currentColor" stroke-width="1.8"/></svg>Dashboard</span>
+          <span class="tmDummyAction" role="button" tabindex="0" data-dummy-action="Cari history claim"><svg class="tmTopIcon" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h16M4 17h16M7 4v16" stroke="currentColor" stroke-width="1.8"/></svg>Claim Accounts</span>
+          <span class="tmDummyAction tmNavDisabled" role="button" tabindex="0" data-dummy-action="Contacts"><svg class="tmTopIcon" viewBox="0 0 24 24" fill="none"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0" stroke="currentColor" stroke-width="1.8"/></svg>Contacts</span>
+          <span class="tmDummyAction tmNavDisabled" role="button" tabindex="0" data-dummy-action="Reports"><svg class="tmTopIcon" viewBox="0 0 24 24" fill="none"><path d="M5 7h14v13H5V7Zm4 0V4h6v3" stroke="currentColor" stroke-width="1.8"/></svg>Reports</span>
+        </nav>
+
+        <div class="tmTopActions">
+          <span class="tmDummyAction" role="button" tabindex="0" aria-label="Search" data-dummy-action="Search"><svg class="tmTopIcon" viewBox="0 0 24 24" fill="none"><path d="m20 20-4.2-4.2M18 11a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" stroke="currentColor" stroke-width="2"/></svg></span>
+          <span class="tmDummyAction" role="button" tabindex="0" aria-label="Add" data-dummy-action="Quick Add"><svg class="tmTopIcon" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2"/></svg></span>
+          <span class="tmDummyAction" role="button" tabindex="0" aria-label="Settings" data-dummy-action="Settings"><svg class="tmTopIcon" viewBox="0 0 24 24" fill="none"><path d="M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6Z" stroke="currentColor" stroke-width="1.8"/><path d="M4 12h2m12 0h2M12 4v2m0 12v2M6.3 6.3l1.4 1.4m8.6 8.6 1.4 1.4m0-11.4-1.4 1.4m-8.6 8.6-1.4 1.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+          <span class="tmAvatar tmDummyAction" role="button" tabindex="0" aria-label="Profile" data-dummy-action="Profile"></span>
+        </div>
+      </div>
+
+      <div class="tmPageHeader">
+        <div class="tmPageTitle"><strong id="tmPageCount">0</strong> Claims</div>
+        <div class="tmViewSwitch">
+          <button class="tmTabBtn" data-tab="input">Input View</button>
+          <button class="tmTabBtn active" data-tab="hasil">List View</button>
+          <button class="tmTabBtn" data-tab="terminal">Terminal</button>
+        </div>
+        <div class="tmPageActions">
+          <button class="tmPrimaryBtn" id="tmStartBtn" type="button">Input Vin</button>
+          <button class="tmSoftBtn" id="tmPauseBtn" type="button">Pause</button>
+          <button class="tmSoftBtn" id="tmContinueBtn" type="button">Continue</button>
+          <button class="tmSoftBtn" id="tmStopBtn" type="button">Stop</button>
+          <button class="tmSoftBtn" id="tmClearListBtn" type="button">Clear List</button>
+          <button class="tmSoftBtn" id="tmClearTerminalBtn" type="button">Clear Log</button>
+        </div>
+      </div>
+
+      <div class="tmFiltersBar">
+        <div class="tmFilterBox">
+          <label for="tmWmiInput">WMI</label>
+          <input id="tmWmiInput" maxlength="3" placeholder="MHK" />
+        </div>
+        <div class="tmFilterBox">
+          <label for="tmVdsInput">VDS</label>
+          <input id="tmVdsInput" maxlength="6" placeholder="A6GJ3J" />
+        </div>
+        <div class="tmFilterBox">
+          <label for="tmCdInput">CD</label>
+          <input id="tmCdInput" maxlength="1" placeholder="-" />
+        </div>
+        <div class="tmFilterBox">
+          <label for="tmVisInput">VIS</label>
+          <input id="tmVisInput" maxlength="8" placeholder="PJ041620" />
+        </div>
+        <button class="tmActionBtn" id="tmSearchPartsBtn" type="button">Search Parts</button>
+        <div class="tmSearchBox">
+          <input id="tmResultSearchInput" placeholder="Search for a VIN or model" />
+          <span><svg class="tmTopIcon" viewBox="0 0 24 24" fill="none"><path d="m20 20-4.2-4.2M18 11a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" stroke="currentColor" stroke-width="2"/></svg></span>
+        </div>
+        <button class="tmActionBtn" id="tmExportMainBtn" type="button">Export to CSV</button>
+      </div>
+
+      <div id="tmMainContent">
+        <div class="tmTabContent" id="tmTabInput">
+          <div class="tmInputLayout">
+            <div class="tmInputPanel">
+              <div class="tmPanelHead">
+                <div>
+                  <strong>Nomor rangka bulk</strong>
+                  <span>Masukkan 1 VIN per baris. Untuk pencarian langsung by parts, gunakan filter WMI/VDS/CD/VIS di atas.</span>
+                </div>
+                <span class="tmVinCountBadge" id="tmVinBulkCount">0 nomor rangka</span>
+              </div>
+              <textarea id="tmVinInput" spellcheck="false" placeholder="MHKAB1BY1RK102261&#10;MHKAA1BA4NJ047262&#10;MHKA6GJ3JPJ041620"></textarea>
+            </div>
+
+            <aside class="tmSidePanel">
+              <div>
+                <div class="tmMiniLabel">epCodeDealer request</div>
+                <input id="tmEpCodeInput" value="TR15" />
+              </div>
+
+              <div class="tmBtnGrid">
+                <button id="tmStartBulkBtn" type="button">Start Bulk</button>
+                <button id="tmSearchPartsSideBtn" type="button">Search Parts</button>
+              </div>
+
+              <div id="tmAuthStatus" class="tmStatusWarn">Mengecek token/session...</div>
+              <div id="tmCounter">0 / 0</div>
+
+              <div class="tmHelpBox">
+                Format utama diexport lewat tombol Export to CSV. Kolom filter WMI/VDS/CD/VIS menggantikan Owner, Group, dan Radius pada layout referensi.
+              </div>
+            </aside>
+          </div>
+        </div>
+
+        <div class="tmTabContent active" id="tmTabHasil">
+          <div class="tmProgressSection">
+            <div id="tmProgressWrap"><div id="tmProgressBar"></div></div>
+            <div class="tmProgressMeta">
+              <span id="tmProgressEta">Estimasi: -</span>
+              <span id="tmProgressSize">Data dimuat: 0 B (0 request)</span>
+            </div>
+          </div>
+          <div id="tmResultWrap">
+            <table id="tmResultTable">
+              <thead>
+                <tr>
+                  <th>No</th>
+                  <th>VIN</th>
+                  <th>deliveryDate</th>
+                  <th>modelCode</th>
+                  <th>modelName</th>
+                  <th>RepairDate</th>
+                  <th>10000K</th>
+                  <th>RepairDate</th>
+                  <th>20000K</th>
+                  <th>RepairDate</th>
+                  <th>30000K</th>
+                  <th>RepairDate</th>
+                  <th>40000K</th>
+                  <th>RepairDate</th>
+                  <th>50000K</th>
+                  <th>RepairDate</th>
+                  <th>60000K</th>
+                </tr>
+              </thead>
+              <tbody id="tmResultBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="tmTabContent" id="tmTabTerminal">
+          <div id="tmTerminal"></div>
+        </div>
+      </div>
+    `;
+
+      document.documentElement.appendChild(panel);
+      ensureToastHost();
+
+      document.getElementById('tmStartBtn').addEventListener('click', () => {
+          switchTab('input');
+      });
+      document.getElementById('tmStartBulkBtn').addEventListener('click', startProcess);
+      document.getElementById('tmSearchPartsBtn').addEventListener('click', startPartsSearch);
+      document.getElementById('tmSearchPartsSideBtn').addEventListener('click', startPartsSearch);
+      document.getElementById('tmPauseBtn').addEventListener('click', pauseProcess);
+      document.getElementById('tmContinueBtn').addEventListener('click', continueProcess);
+      document.getElementById('tmStopBtn').addEventListener('click', stopProcess);
+      document.getElementById('tmClearListBtn').addEventListener('click', clearListView);
+      document.getElementById('tmClearTerminalBtn').addEventListener('click', clearTerminalLog);
+      document.getElementById('tmExportMainBtn').addEventListener('click', exportMainCSV);
+      document.getElementById('tmResultSearchInput').addEventListener('input', filterResultRows);
+      document.getElementById('tmVinInput').addEventListener('input', updateVinBulkCount);
+
+      document.querySelectorAll('.tmTabBtn').forEach(btn => {
+          btn.addEventListener('click', () => {
+              switchTab(btn.dataset.tab);
+          });
+      });
+
+      attachDummyActionToasts(panel);
+      registerUISlashShortcut();
+
+      logTerminal('UI fullscreen CRM siap. Export to CSV memakai Format Utama.', 'info');
+      logTerminal('Filter WMI/VDS/CD/VIS siap untuk pencarian langsung split VIN.', 'success');
+
+      const found = scanStorageForToken();
+      if (!found) {
+          logTerminal('Token belum ditemukan. Buka fitur Passport yang biasanya memanggil API agar Authorization tertangkap otomatis.', 'warn');
+      }
+
+      updateAuthStatus();
+      updateListCount();
+      updateVinBulkCount();
+  }
+
+    function ensureToastHost() {
+        let host = document.getElementById('tmClaimToastHost');
+        if (host) return host;
+
+        host = document.createElement('div');
+        host.id = 'tmClaimToastHost';
+        document.documentElement.appendChild(host);
+
+        return host;
+    }
+
+    function showToast(message) {
+        const host = ensureToastHost();
+        const toast = document.createElement('div');
+
+        toast.className = 'tmToast';
+        toast.textContent = message;
+
+        host.appendChild(toast);
+        requestAnimationFrame(() => {
+            toast.classList.add('show');
+        });
+
+        window.setTimeout(() => {
+            toast.classList.remove('show');
+            toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+            window.setTimeout(() => toast.remove(), 350);
+        }, 2600);
+    }
+
+    function attachDummyActionToasts(root) {
+        root.querySelectorAll('[data-dummy-action]').forEach(el => {
+            const notify = () => {
+                const label = el.getAttribute('data-dummy-action') || 'Fitur ini';
+                showToast(`${label} masih dalam proses pengembangan.`);
+            };
+
+            el.addEventListener('click', notify);
+            el.addEventListener('keydown', event => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+
+                event.preventDefault();
+                notify();
+            });
+        });
+    }
+
+    function registerUISlashShortcut() {
+        if (window.__tmClaimSlashShortcutBound) return;
+
+        window.__tmClaimSlashShortcutBound = true;
+        document.addEventListener('keydown', event => {
+            if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey) return;
+
+            event.preventDefault();
+            toggleTampermonkeyUI();
+        }, true);
+    }
+
+    function toggleTampermonkeyUI() {
+        const panel = document.getElementById('tmClaimPanel');
+        if (!panel) return;
+
+        const willHide = !panel.classList.contains('tmUiHidden');
+
+        panel.classList.toggle('tmUiHidden', willHide);
+        document.documentElement.classList.toggle('tmClaimUiHidden', willHide);
+
+        showToast(
+            willHide
+            ? 'Claim finder disembunyikan. Tekan / untuk menampilkan kembali.'
+            : 'Claim finder ditampilkan kembali.'
+        );
+    }
+
+    function getVinInputLines() {
+        const input = document.getElementById('tmVinInput')?.value || '';
+
+        return input
+            .split(/\r?\n/)
+            .map(x => x.trim())
+            .filter(Boolean);
+    }
+
+    function updateVinBulkCount() {
+        const el = document.getElementById('tmVinBulkCount');
+        if (!el) return;
+
+        const total = getVinInputLines().length;
+        el.textContent = `${total} nomor rangka`;
+    }
+
+    function clearListView() {
+        if (isRunning) {
+            logTerminal('Clear List tidak bisa dilakukan saat proses masih berjalan. Stop atau tunggu selesai terlebih dahulu.', 'warn');
+            showToast('Proses masih berjalan. Stop atau tunggu selesai sebelum Clear List.');
+            return;
+        }
+
+        queue = [];
+        currentIndex = 0;
+        mainResults = [];
+        detailResults = [];
+        summaryResults = [];
+        resetProgressMetrics();
+        clearTable();
+        updateProgress();
+        updateListCount();
+
+        const searchInput = document.getElementById('tmResultSearchInput');
+        if (searchInput) searchInput.value = '';
+
+        showToast('List view sudah dibersihkan.');
+    }
+
+    function clearTerminalLog() {
+        const term = document.getElementById('tmTerminal');
+        if (term) term.innerHTML = '';
+
+        showToast('Log terminal sudah dibersihkan.');
+    }
+
+    async function startPartsSearch() {
+        if (isRunning) {
+            logTerminal('Proses masih berjalan. Gunakan Pause atau Stop terlebih dahulu.', 'warn');
+            return;
+        }
+
+        let vinInfo;
+        try {
+            vinInfo = getVINPartInputInfo();
+        } catch (err) {
+            logTerminal(`Pencarian WMI/VDS/CD/VIS gagal: ${err.message}`, 'error');
+            switchTab('terminal');
+            return;
+        }
+
+        queue = [vinInfo];
+        mainResults = [];
+        detailResults = [];
+        summaryResults = [];
+        currentIndex = 0;
+        shouldStop = false;
+        isPaused = false;
+        isRunning = true;
+        resetProgressMetrics();
+
+        clearTable();
+        renderMainResults();
+        switchTab('terminal');
+        logTerminal(`Mulai pencarian split VIN: ${formatVINInfoSplit(vinInfo)}`, 'success');
+        startProgressTimer();
+        updateProgress();
+
+        await processQueue();
+    }
+
+    function getVINPartInputInfo() {
+        const wmi = normalizePartInput('tmWmiInput');
+        const vds = normalizePartInput('tmVdsInput');
+        const cd = normalizePartInput('tmCdInput');
+        const vis = normalizePartInput('tmVisInput');
+
+        if (wmi.length !== 3) {
+            throw new Error('WMI wajib 3 karakter.');
+        }
+
+        if (vds.length < 4 || vds.length > 6) {
+            throw new Error('VDS wajib 4 sampai 6 karakter.');
+        }
+
+        if (cd.length > 1) {
+            throw new Error('CD maksimal 1 karakter atau kosong.');
+        }
+
+        if (vis.length !== 8) {
+            throw new Error('VIS wajib 8 karakter.');
+        }
+
+        return {
+            vin: wmi + vds + cd + vis,
+            wmi,
+            vds,
+            cd,
+            vis,
+            source: 'manual-parts'
+        };
+    }
+
+    function normalizePartInput(id) {
+        const el = document.getElementById(id);
+        return String(el?.value || '')
+            .trim()
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, '');
+    }
+
+    function filterResultRows() {
+        const input = document.getElementById('tmResultSearchInput');
+        const tbody = document.getElementById('tmResultBody');
+        const needle = String(input?.value || '').trim().toLowerCase();
+
+        if (!tbody) return;
+
+        Array.from(tbody.rows).forEach(row => {
+            row.style.display = !needle || row.textContent.toLowerCase().includes(needle) ? '' : 'none';
+        });
+    }
+
+    function updateListCount() {
+        const el = document.getElementById('tmPageCount');
+        if (el) el.textContent = String(mainResults.length || 0);
+    }
+
+    function waitDOMReady() {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', injectUI);
+        } else {
+            injectUI();
+        }
+    }
+
+    waitDOMReady();
+
+})();
