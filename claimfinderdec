@@ -35,6 +35,9 @@
     const REQUEST_DELAY_MS = 350;
     const FREE_LIMIT = 6;
     const MAIN_SERVICE_OPERATIONS = ['10000K', '20000K', '30000K', '40000K', '50000K', '60000K'];
+    const DEALER_BRANCH_MAP = {"VS33": "KARTIKA SARI - MALANG", "AA01": "AGUNG TOYOTA PEKANBARU 1", "AA02": "AGUNG TOYOTA JAMBI 1", "AA03": "AGUNG TOYOTA BENGKULU", "AA05": "AGUNG TOYOTA DENPASAR", "AA06": "AGUNG TOYOTA BATAM", "AA07": "AGUNG TOYOTA DURI", "AA08": "AGUNG TOYOTA GIANYAR", "AA09": "AGUNG TOYOTA SM Amin Pekan Baru 3 )", "AA10": "AGUNG TOYOTA KUTA", "AA11": "AGUNG TOYOTA MUARA BUNGO", "AA12": "AGUNG TOYOTA SEKUPANG", "AA13": "AGUNG TOYOTA TANJUNG PINANG", "AA14": "AGUNG TOYOTA TABANAN", "AA16": "AGUNG TOYOTA PANGKALAN KERINCI", "AA17": "AGUNG TOYOTA JAMBI 2", "AA18": "AGUNG TOYOTA PEKANBARU 4", "AA19": "AGUNG TOYOTA BAGAN BATU", "AA20": "AGUNG TOYOTA UJUNG BATU", "AA21": "AGUNG TOYOTA SINGARAJA", "AA22": "AGUNG TOYOTA TELUK KUANTAN", "AA23": "AGUNG TOYOTA DUMAI", "AA24": "AGUNG TOYOTA BATAM CENTER", "AJ01": "ASTRIDO TOYOTA KEBON JERUK", "AJ02": "ASTRIDO TOYOTA BANDENGAN", "AJ03": "ASTRIDO TOYOTA TANGERANG", "AJ04": "ASTRIDO TOYOTA FATMAWATI", "AJ05": "ASTRIDO TOYOTA YOS SUDARSO", "AJ06": "ASTRIDO TOYOTA PONDOK GEDE", "AJ07": "ASTRIDO TOYOTA PONDOK INDAH", "AJ08": "ASTRIDO TOYOTA BEKASI", "AJ09": "ASTRIDO TOYOTA KELAPA GADING", "AJ10": "ASTRIDO TOYOTA KARAWACI", "AJ11": "ASTRIDO TOYOTA PONDOK CABE", "AJ12": "ASTRIDO TOYOTA KARAWANG (VSP )", "AJ13": "ASTRIDO TOYOTA CILEUNGSI", "AJ14": "ASTRIDO TOYOTA BITUNG", "AJ15": "ASTRIDO TOYOTA BITUNG", "AS02": "AUTO2000 - KALIMALANG", "AS03": "AUTO2000 - PLUIT", "AS04": "AUTO2000 - GARUDA", "AS06": "AUTO2000 - TEBET SUPOMO", "AS09": "AUTO2000 - DAAN MOGOT", "AS10": "AUTO2000 - P. JAYAKARTA", "AS100": "AUTO2000 -  CIBIRU - BP", "AS101": "AUTO2000 -  KENJERAN - BP", "AS102": "AUTO2000 -  MEDAN AMPLAS - BP", "AS103": "AUTO2000 -  BALIKPAPAN  II  JL.MT.HARYONO", "AS104": "AUTO2000 - KAPUK", "AS105": "AUTO2000 -  AMPLAS", "AS106": "AUTO2000 -  BOGOR  II  JL.YASMIN", "AS107": "AUTO2000 -  CIBIRU - GR", "AS108": "AUTO2000 -  MALANG -  SUKUN", "AS109": "AUTO2000 -  KEDIRI", "AS110": "AUTO2000 -  KERTAJAYA", "AS111": "AUTO2000 -  KENJERAN", "AS112": "AUTO2000 - CIKARANG", "AS113": "AUTO2000 - BEKASI BARAT", "AS114": "AUTO2000 - BEKASI TIMUR - BP", "AS115": "AUTO2000 - PONDOK JAGUNG-BP", "AS116": "AUTO2000 -  SAMARINDA", "AS117": "AUTO2000 - LENTENG AGUNG", "AS118": "AUTO2000 -  SANUR", "AS119": "AUTO2000 - CIKOKOL TANGERANG", "AS12": "AUTO2000 - SALEMBA", "AS120": "AUTO2000 -  KARAWANG -BP", "AS121": "AUTO2000 -  SANUR - BP", "AS122": "AUTO2000 -  CIREBON - BP", "AS123": "AUTO2000 -  BYPASS PADANG BP", "AS124": "AUTO2000 -  WAY HALIM BP", "AS126": "AUTO2000 -  SAMARINDA - BP", "AS127": "AUTO2000 -  INDRAMAYU", "AS128": "AUTO2000 -  TUBAN", "AS129": "AUTO2000 -  BOGOR  YASMIN BP", "AS13": "AUTO2000 - CILANDAK", "AS130": "AUTO2000 -  TABANAN", "AS131": "AUTO2000 - PERMATA HIJAU", "AS132": "AUTO2000 -  SETIABUDI BANDUNG", "AS133": "AUTO2000 -  TANJUNG API - API", "AS134": "AUTO2000 -  BALIKPAPAN BP (Balikpapan 3)", "AS135": "AUTO2000 -  SINGOSARI- BP", "AS136": "AUTO2000 -  JEMBER - BP", "AS137": "AUTO2000 - KELAPA GADING", "AS138": "AUTO2000 - SERANG", "AS139": "AUTO2000 -  TANJUNG API - API - BP", "AS140": "AUTO2000 -  MEDAN PANCING", "AS141": "AUTO2000 - SERANG - BP", "AS142": "AUTO2000 -  BANDUNG SUCI", "AS143": "AUTO2000 -  BYPASS PADANG", "AS144": "AUTO2000 -  PURWAKARTA", "AS145": "AUTO2000 - KRIDA", "AS146": "AUTO2000 - ALAM SUTERA", "AS147": "AUTO2000 -  SBY WIYUNG", "AS148": "AUTO2000 - CIKUPA ( VSP)", "AS149": "AUTO2000 -  RANCAEKEK ( VSP - PDC)", "AS150": "AUTO2000 -  GIANYAR ( VSP)", "AS151": "AUTO2000 - BONTANG", "AS152": "AUTO2000 - PROBOLINGGO", "AS153": "AUTO2000 - KEDIRI 2 SUHARMAJI", "AS154": "AUTO2000 - BANYUWANGI", "AS155": "AUTO2000 -  BUKIT TINGGI", "AS156": "AUTO2000 SINGARAJA", "AS157": "AUTO2000 PONTIANAK", "AS158": "AUTO2000 - KEDIRI 2 SUHARMAJI BP", "AS159": "AUTO2000 MANYAR GRESIK", "AS16": "AUTO2000 -  ASIA AFRIKA", "AS160": "AUTO2000 ACHMAD YANI BANJARMASIN", "AS161": "AUTO2000 MAJALENGKA", "AS162": "AUTO2000 -  SUKABUMI", "AS164": "AUTO2000 BINJAI", "AS165": "AUTO2000 TULANG BAWANG", "AS166": "AUTO2000 DRAMAGA", "AS167": "AUTO2000 MEDAN MARELAN", "AS168": "AUTO2000 WAYHALIM", "AS169": "AUTO2000 BSD CITY ( ASTRA BIZ CENTER )", "AS17": "AUTO2000 -  SOEKARNO HATTA - GR", "AS170": "AUTO2000 PASAR KEMIS GR", "AS171": "AUTO2000 JATIASIH", "AS172": "AUTO2000 PASAR KEMIS BP", "AS173": "AUTO2000 GRAND DEPOK CITY", "AS174": "AUTO2000 PANDEGLANG", "AS175": "AUTO2000 TANJUNG MORAWA", "AS176": "AUTO2000 BATURAJA", "AS177": "AUTO2000 TULUNG AGUNG", "AS178": "AUTO2000 PASURUAN VSP", "AS179": "AUTO2000 JOMBANG", "AS18": "AUTO2000 -  PASTEUR", "AS180": "AUTO2000 RANTAU PRAPAT", "AS181": "AUTO2000 KISARAN", "AS182": "AUTO2000 KOTABUMI", "AS183": "AUTO2000 SANGATTA", "AS184": "AUTO2000 KALIANDA", "AS185": "AUTO2000 SINGOSARI", "AS186": "AUTO2000 SUKABUMI BP", "AS187": "AUTO2000 - CIKARANG UTARA", "AS188": "AUTO2000 KUNINGAN", "AS189": "AUTO2000 CIKAMPEK", "AS190": "AUTO2000 MUSI BANYUASIN ( SEKAYU )", "AS191": "AUTO2000 TENGGARONG", "AS20": "AUTO2000 -  BOGOR I JL.SILIWANGI", "AS23": "AUTO2000 -  CIBINONG", "AS25": "AUTO2000 -  CIREBON -GR", "AS29": "AUTO2000 -  SUNGKONO/ HR MOHAMMAD", "AS31": "AUTO2000 -  BASUKI RACHMAT", "AS32": "AUTO2000 -  WARU - GR", "AS33": "AUTO2000 -  PECINDILAN", "AS35": "AUTO2000 -  DENPASAR", "AS37": "AUTO2000 -  ACHMAD YANI", "AS38": "AUTO2000 -  JEMUR SARI", "AS40": "AUTO2000 -  BALIKPAPAN  I  JL.SUDIRMAN", "AS45": "AUTO2000 -  MEDAN SM RAJA", "AS47": "AUTO2000 -  GATOT SOEBROTO", "AS50": "AUTO2000 -  PADANG - GR", "AS55": "AUTO2000 -  PALEMBANG PLAJU", "AS60": "AUTO2000 -  MALANG I JL. SOETOYO", "AS65": "AUTO2000 -  TANJUNG KARANG I - RADEN INTAN", "AS66": "AUTO2000 -  TANJUNG KARANG II - RAJABASA HAJIMENA", "AS73": "AUTO2000 - BINTARO JAYA", "AS74": "AUTO2000 - PRAMUKA", "AS77": "AUTO2000 -  MADIUN", "AS80": "AUTO2000 -  JEMBER", "AS84": "AUTO2000 - CEMPAKA PUTIH", "AS86": "AUTO2000 - RADIO DALAM", "AS87": "AUTO2000 - CILEDUG", "AS88": "AUTO2000 - BEKASI TIMUR - GR", "AS89": "AUTO2000 -  KARAWANG GR", "AS90": "AUTO2000 - YOS SUDARSO", "AS91": "AUTO2000 - KRAMAT JATI", "AS92": "AUTO2000 - TEBET SAHARJO", "AS94": "AUTO2000 - PURI KEMBANGAN", "AS96": "AUTO2000 - CILEDUG BP", "AS98": "AUTO2000 - BUMI SERPONG DAMAI", "AS99": "AUTO2000 - SUNTER - BP", "HA01": "HASJRAT ABADI MANADO  I  JL.RAYA KOMBOS", "HA02": "HASJRAT ABADI GORONTALO", "HA03": "HASJRAT ABADI PALU", "HA04": "HASJRAT ABADI AMBON", "HA05": "HASJRAT ABADI KOTAMOBAGU", "HA06": "HASJRAT ABADI JAYAPURA", "HA07": "HASJRAT ABADI SORONG", "HA08": "HASJRAT ABADI BIAK", "HA09": "HASJRAT ABADI NABIRE", "HA10": "HASJRAT ABADI TIMIKA", "HA11": "HASJRAT ABADI LUWUK", "HA12": "HASJRAT ABADI MANADO  II  JL.SUDIRMAN", "HA13": "HASJRAT ABADI MERAUKE", "HA14": "HASJRAT ABADI ABEPURA", "HA15": "HASJRAT ABADI TENDEAN ( MANADO III )", "HA17": "HASJRAT ABADI MUTIARA - PALU", "HA18": "HASJRAT ABADI DURIAN - PALU - BP", "HA19": "HASJRAT ABADI BITUNG", "HA20": "HASJRAT ABADI LIMBOTO - GORONTALO", "HK01": "HADJI KALLA URIP MAKASAR", "HK02": "HADJI KALLA KENDARI", "HK03": "HADJI KALLA PARE PARE", "HK04": "HADJI KALLA PALU-JUANDA", "HK05": "HADJI KALLA BONE", "HK06": "HADJI KALLA SENGKANG", "HK07": "HADJI KALLA SIDRAP", "HK08": "HADJI KALLA POLMAN", "HK09": "HADJI KALLA PALOPO", "HK10": "HADJI KALLA BULUKUMBA", "HK11": "HADJI KALLA TANA TORAJA", "HK12": "HADJI KALLA ALAUDDIN", "HK14": "HADJI KALLA KOLAKA", "HK15": "HADJI KALLA MAMUJU", "HK16": "HADJI KALLA SERUI", "HK17": "HADJI KALLA POSO", "HK18": "HADJI KALLA MAROS", "HK19": "HADJI KALLA PALU 2-MARTADINATA", "HK20": "HADJI KALLA KALLA GOWA", "HK21": "HADJI KALLA SOPPENG", "LXS01": "LEXUS NATIONAL TECHNICAL CENTER", "LXS02": "LEXUS MAMPANG (PT ANANTA AUTO ANDALAN)", "LXS03": "LEXUS PLUIT GALLERY", "N/A": "Hadji Kalla Learing Center", "NR01": "NASMOCO PEMUDA  SEMARANG", "NR02": "NASMOCO KALIGAWE SEMARANG", "NR03": "NASMOCO SALATIGA", "NR04": "NASMOCO PURWOKERTO", "NR05": "NASMOCO CILACAP", "NR06": "NASMOCO SLAMET RIYADI - SOLO", "NR08": "SURYA INDAH MOTOR - KUDUS", "NR10": "NASMOCO TEGAL", "NR11": "NASMOCO PEKALONGAN", "NR12": "NASMOCO MLATI - YOGYAKARTA", "NR13": "NASMOCO MAGELANG", "NR14": "NASMOCO MAJAPAHIT - SEMARANG", "NR15": "NASMOCO JANTI - YOGYAKARTA", "NR16": "NASMOCO GOMBEL - SEMARANG", "NR17": "NASMOCO SOLO BARU", "NR18": "NASMOCO BANTUL", "NR19": "NASMOCO WONOSOBO", "NR20": "NASMOCO KARANG ANYAR", "NR21": "SURYA INDAH MOTOR - JEPARA", "NR22": "NASMOCO BREBES", "NR23": "NASMOCO KARANGJATI", "NR24": "NASMOCO SILIWANGI", "NR25": "NASMOCO PATI", "NR26": "NASMOCO KLATEN", "NR27": "NASMOCO PURBALINGGA", "NR28": "NASMOCO DEMAK", "TR01": "TUNAS TOYOTA CAWANG", "TR02": "TUNAS TOYOTA CILEGON", "TR03": "TUNAS TOYOTA CIPUTAT", "TR04": "TUNAS TOYOTA MAMPANG PRAPATAN", "TR05": "TUNAS TOYOTA JATINEGARA", "TR06": "TUNAS TOYOTA TANGERANG", "TR07": "TUNAS TOYOTA PASAR MINGGU", "TR08": "TUNAS TOYOTA BINTARO", "TR09": "TUNAS TOYOTA CIMINDI - BANDUNG", "TR10": "TUNAS TOYOTA KEBAYORAN LAMA", "TR11": "TUNAS TOYOTA CINERE", "TR12": "TUNAS TOYOTA GATOT SOEBROTO - BANDUNG", "TR13": "TUNAS TOYOTA LATUMENTEN", "TR14": "TUNAS TOYOTA SERANG", "TR15": "TUNAS TOYOTA BATU TULIS", "TR16": "TUNAS TOYOTA JATIWARINGIN", "TR17": "TUNAS TOYOTA RADIN INTEN", "TR18": "TUNAS TOYOTA BANDAR JAYA LAMPUNG ( TUNAS RIDEAN)", "TR19": "TUNAS TOYOTA RADIN INTEN BP", "TR20": "TUNAS TOYOTA BINTARO BP", "TR21": "TUNAS TOYOTA CILEGON BP", "TR22": "TUNAS TOYOTA CIPONDOH", "TR23": "TUNAS TOYOTA BEKASI", "TR24": "TUNAS TOYOTA BALARAJA", "TSD02": "TAM - SUNTER II", "TSD03": "LEXUS ASTRA GALLERY", "VS05": "DUNIA BARUSA - LHOKSEUMAWE", "VS07": "PERINTIS PERKASA - MEDAN", "VS10": "ANZON AUTOPLAZA - PONTIANAK", "VS102": "LIEK MOTOR - PAMEKASAN", "VS11": "WIRA MEGAH PROFITAMAS - BANJARMASIN", "VS12": "GRAHA MULIA AUTO SAMARINDA", "VS13": "AKASTRA MOTOR - PALMERAH", "VS17": "SETIAJAYA MOBILINDO - DEPOK", "VS18": "SINAR MAS - TASIKMALAYA", "VS19": "MERDEKA MOTOR - BANDUNG", "VS20": "SETIAJAYA MOBILINDO - BOGOR", "VS21": "REJEKI TOYOTA - SUMEDANG", "VS22": "SELAMAT LESTARI MANDIRI - SUKABUMI", "VS23": "DUTA CENDANA MOBILINDO - CIANJUR", "VS31": "AUTO NUSA ABADI - KUPANG", "VS32": "KRIDA TOYOTA - MATARAM", "VS35": "HASJRAT ABADI - TERNATE (dlm proses otorisasi)", "VS40": "ASTRIDO TOYOTA KLENDER", "VS42": "WIJAYA TOYOTA I - BANDUNG (Lestari)", "VS44": "SINAR SURI - MANOKWARI", "VS47": "ASRI MOTOR - SIDOARJO", "VS49": "ARINA PARAMA JAYA - GRESIK", "VS50": "TUNAS AUTOGRAHA - PALEMBANG", "VS51": "ISTANA AGUNG - PANGKAL PINANG", "VS52": "SETIAJAYA MOBILINDO - CIBUBUR", "VS53": "PLAZA TOYOTA - KYAI TAPA", "VS54": "DELTAMAS SURYA INDAH MULIA - MEDAN", "VS55": "SUTAN INDO ANEKA MOBIL - PEMATANG SIANTAR", "VS56": "LIEK MOTOR - INDRAPURA", "VS57": "REJEKI TOYOTA - CIREBON", "VS58": "INTERCOM - PADANG", "VS59": "BUDI JAYA MOBILINDO - GARUT", "VS60": "WIRA MEGAH PROFITAMAS - PALANGKARAYA", "VS61": "TUNAS AUTOGRAHA - LUBUK LINGGAU", "VS62": "SUMBER HARAPAN - TARAKAN", "VS63": "ANZON AUTOPLAZA - SINGKAWANG", "VS64": "PLAZA TOYOTA BANDUNG", "VS65": "PLAZA TOYOTA - TENDEAN", "VS66": "PLAZA TOYOTA - GREEN GARDEN", "VS67": "DUNIA BARUSA - BANDA ACEH", "VS68": "WIJAYA TOYOTA II - BANDUNG ( Dago )", "VS69": "ANZON AUTOPLAZA - SAMPIT", "VS70": "PLAZA TOYOTA - PEMUDA", "VS71": "PLAZA TOYOTA - GADING SERPONG", "VS72": "SETIAJAYA MOBILINDO - CIMANGGIS", "VS73": "WIRA MEGAH PROFITAMAS - BANJARBARU", "VS75": "ASRI MOTOR - TAMAN SIDOARJO", "VS76": "WIJAYA TOYOTA - SUBANG", "VS77": "PLAZA TOYOTA - KARANGGAN BP", "VS78": "PERINTIS PERKASA FLAMBOYAN", "VS79": "ANZON AUTO LESTARI TAMBUN", "VS80": "MERDEKA MOTOR  SOREANG", "VS81": "TUNAS AUTOGRAHA PRABUMULIH (VSP)", "VS82": "SETIAJAYA MOBILINDO - PARUNG", "VS84": "SETIAJAYA  - DEPOK BP", "VS85": "DAYA TOYOTA CAKUNG", "VS89": "WIRA MEGAH PROFITAMAS - BANJARMASIN", "VS90": "DUNIA BARUSA - MEULABOH", "VS91": "ANZON AUTOPLAZA- SINTANG", "VS92": "INDRAPURA MEGAH MAKMUR", "VS93": "WIJAYA TOYOTA- PADALARANG", "VS94": "PLAZA TOYOTA CITEREUP", "VS95": "DELTAMAS SURYA INDAH MULIA - BP", "VS96": "REJEKI TOYOTA INDRAMAYU", "VS97": "JD TOYOTA JABABEKA CIKARANG", "VS98": "DAYA TOYOTA BEKASI"};
+
+    let showBranchColumns = true;
 
     let capturedAuthorization = '';
     let isRunning = false;
@@ -49,6 +52,7 @@
     let vinDurations = [];
     let totalResponseBytes = 0;
     let totalResponseRequests = 0;
+    let retryErrorQueue = [];
 
     // Format Utama = 1 VIN = 1 baris dengan kolom free service 10K-60K
     let mainResults = [];
@@ -1489,6 +1493,7 @@
 
                   <div class="tmExportStack">
                     <button class="tmBtn tmBtnExport" id="tmExportMainBtn">Export Format Utama</button>
+                    <button class="tmBtn tmBtnExport" id="tmExportExcelBtn">Export Excel</button>
                     <button class="tmBtn tmBtnExport" id="tmExportFormat1Btn">Export Format1 Detail</button>
                     <button class="tmBtn tmBtnExport" id="tmExportFormat2Btn">Export Format2 Summary</button>
                   </div>
@@ -1501,7 +1506,7 @@
                   10000k, 20000k, 30000k.<br><br>
                   Tidak dihitung:<br>
                   10000B, 20000b, 642991, YHG14A.<br><br>
-                  remainingFree = 6 - claimCount.
+                  remainingFree dihitung dari service terakhir yang sudah klaim; service yang terlewat dianggap hangus.
                 </div>
               </div>
             </div>
@@ -1558,7 +1563,9 @@
       document.getElementById('tmPauseBtn').addEventListener('click', pauseProcess);
       document.getElementById('tmContinueBtn').addEventListener('click', continueProcess);
       document.getElementById('tmStopBtn').addEventListener('click', stopProcess);
+      document.getElementById('tmToggleBranchBtn').addEventListener('click', toggleBranchColumns);
       document.getElementById('tmExportMainBtn').addEventListener('click', exportMainCSV);
+      document.getElementById('tmExportExcelBtn').addEventListener('click', exportMainExcel);
       document.getElementById('tmExportFormat1Btn').addEventListener('click', exportFormat1CSV);
       document.getElementById('tmExportFormat2Btn').addEventListener('click', exportFormat2CSV);
 
@@ -2147,6 +2154,7 @@
         }
 
         queue = [];
+        retryErrorQueue = [];
         mainResults = [];
         detailResults = [];
         summaryResults = [];
@@ -2230,6 +2238,39 @@
         logTerminal('Proses dilanjutkan.', 'success');
     }
 
+    async function retryErrorProcess() {
+        if (isRunning) {
+            logTerminal('Proses masih berjalan. Tunggu selesai sebelum retry error.', 'warn');
+            return;
+        }
+
+        if (!retryErrorQueue.length) {
+            logTerminal('Tidak ada VIN error / tidak ditemukan untuk diulang.', 'warn');
+            return;
+        }
+
+        queue = retryErrorQueue.slice();
+        retryErrorQueue = [];
+        currentIndex = 0;
+        shouldStop = false;
+        isPaused = false;
+        isRunning = true;
+        resetProgressMetrics();
+
+        switchTab('terminal');
+        logTerminal(`Retry hanya VIN error / tidak ditemukan. Total: ${queue.length}.`, 'warn');
+        startProgressTimer();
+        updateProgress();
+
+        await processQueue();
+    }
+
+    function addRetryErrorVIN(vinInfo) {
+        const key = getVINInfoKey(vinInfo);
+        const exists = retryErrorQueue.some(item => getVINInfoKey(item) === key);
+        if (!exists) retryErrorQueue.push({ ...vinInfo });
+    }
+
     function stopProcess() {
         if (!isRunning) {
             logTerminal('Tidak ada proses berjalan.', 'warn');
@@ -2275,7 +2316,8 @@
                 const item2 = Array.isArray(json?.data?.item2) ? json.data.item2 : [];
                 const item2Count = item2.length;
                 const claimCount = countFreeClaims(item2);
-                const remainingFree = Math.max(FREE_LIMIT - claimCount, 0);
+                const freeSummary = calculateFreeServiceSummary(item2, json?.data?.item1 || {});
+                const remainingFree = freeSummary.remainingFree;
                 const claimedOps = getClaimedFreeOperations(item2).join(', ') || '-';
 
                 logTerminal(
@@ -2305,7 +2347,8 @@
                     error: err.message
                 });
 
-                pushMainEmptyRow(vinInfo.vin);
+                pushMainErrorRow(vinInfo.vin, err.message);
+                addRetryErrorVIN(vinInfo);
 
                 detailResults.push({
                     no: detailResults.length + 1,
@@ -2358,6 +2401,7 @@
         const item1 = json?.data?.item1 || {};
         const item2 = Array.isArray(json?.data?.item2) ? json.data.item2 : [];
         const row = createMainRow(vin, item1, item2);
+        applyFreeServiceSummary(row, item2, item1);
 
         for (const claim of item2) {
             const operation = normalizeMainServiceOperation(claim?.mainOperationNo);
@@ -2370,9 +2414,10 @@
 
             row[repairDateKey] = repairDate;
             row[serviceKey] = epCodeDealer;
+            row[`branch${operation}`] = getBranchNameByDealerCode(epCodeDealer);
         }
 
-        mainResults.push(row);
+        upsertMainRow(row);
     }
 
     function createMainRow(vin, item1 = {}, item2 = []) {
@@ -2381,19 +2426,44 @@
             vin,
             deliveryDate: formatDate(firstNonEmpty(item2.map(x => x.deliveryDate)) || item1.deliveryDate || ''),
             modelCode: item1.modelCode || '',
-            modelName: item1.modelName || ''
+            modelName: item1.modelName || '',
+            remainingFree: '-',
+            freeUntil: '-',
+            freeStatus: '-'
         };
 
         for (const operation of MAIN_SERVICE_OPERATIONS) {
             row[`repairDate${operation}`] = '-';
             row[`service${operation}`] = '-';
+            row[`branch${operation}`] = '-';
         }
 
         return row;
     }
 
     function pushMainEmptyRow(vin) {
-        mainResults.push(createMainRow(vin));
+        upsertMainRow(createMainRow(vin));
+    }
+
+    function pushMainErrorRow(vin, errorMessage = '') {
+        const row = createMainRow(vin);
+        row.freeStatus = 'ERROR';
+        row.error = errorMessage;
+        upsertMainRow(row);
+    }
+
+    function upsertMainRow(row) {
+        const key = normalizeVIN(row.vin);
+        const existingIndex = mainResults.findIndex(item => normalizeVIN(item.vin) === key);
+
+        if (existingIndex >= 0) {
+            row.no = mainResults[existingIndex].no;
+            mainResults[existingIndex] = row;
+            return;
+        }
+
+        row.no = mainResults.length + 1;
+        mainResults.push(row);
     }
 
     function normalizeMainServiceOperation(value) {
@@ -2406,6 +2476,17 @@
 
         const operation = `${match[1]}K`;
         return MAIN_SERVICE_OPERATIONS.includes(operation) ? operation : '';
+    }
+
+    function getBranchNameByDealerCode(code) {
+        const normalizedCode = String(code || '').trim().toUpperCase();
+        if (!normalizedCode || normalizedCode === '-') return '-';
+        return DEALER_BRANCH_MAP[normalizedCode] || '-';
+    }
+
+    function renderBranchCell(row, operation) {
+        if (!showBranchColumns) return '';
+        return `<td class="tmBranchCell">${escapeHtml(displayValue(row[`branch${operation}`]))}</td>`;
     }
 
     /************************************************************
@@ -2462,7 +2543,8 @@
         const item2 = Array.isArray(json?.data?.item2) ? json.data.item2 : [];
 
         const claimCount = countFreeClaims(item2);
-        const remainingFree = Math.max(FREE_LIMIT - claimCount, 0);
+        const freeSummary = calculateFreeServiceSummary(item2, item1);
+        const remainingFree = freeSummary.remainingFree;
 
         const epCodeDealerList = item2.map(x => x.epCodeDealer || '').filter(Boolean);
         const claimTypeList = item2.map(x => x.claimType || '').filter(Boolean);
@@ -2476,6 +2558,8 @@
             vin,
             claimCount,
             remainingFree,
+            freeUntil: freeSummary.freeUntil,
+            freeStatus: freeSummary.freeStatus,
             modelCode: item1.modelCode || '',
             modelName: item1.modelName || '',
             epCodeDealer: joinMulti(epCodeDealerList),
@@ -2520,6 +2604,46 @@
 
     function countFreeClaims(item2) {
         return getClaimedFreeOperations(item2).length;
+    }
+
+    function calculateFreeServiceSummary(item2, item1 = {}) {
+        const claimedOps = getClaimedFreeOperations(item2);
+        const claimedIndexes = claimedOps
+            .map(op => MAIN_SERVICE_OPERATIONS.indexOf(op.toUpperCase()))
+            .filter(index => index >= 0);
+        const lastClaimIndex = claimedIndexes.length ? Math.max(...claimedIndexes) : -1;
+        const remainingFree = Math.max(FREE_LIMIT - (lastClaimIndex + 1), 0);
+        const deliveryDate = formatDate(firstNonEmpty((Array.isArray(item2) ? item2 : []).map(x => x.deliveryDate)) || item1.deliveryDate || '');
+        const freeUntil = calculateFreeUntil(deliveryDate);
+        const freeStatus = remainingFree > 0 && isDateStillFree(freeUntil) ? 'FREE' : 'PAID';
+
+        return { remainingFree, freeUntil: freeUntil || '-', freeStatus };
+    }
+
+    function applyFreeServiceSummary(row, item2, item1 = {}) {
+        const summary = calculateFreeServiceSummary(item2, item1);
+        row.remainingFree = summary.remainingFree;
+        row.freeUntil = summary.freeUntil;
+        row.freeStatus = summary.freeStatus;
+        return row;
+    }
+
+    function calculateFreeUntil(deliveryDate) {
+        const date = parseDisplayDate(deliveryDate);
+        if (!date) return '';
+        return formatDate(getEndOfMonth(date.getFullYear() + 3, date.getMonth()));
+    }
+
+    function getEndOfMonth(year, monthIndex) {
+        return new Date(year, monthIndex + 1, 0);
+    }
+
+    function isDateStillFree(freeUntil) {
+        const date = parseDisplayDate(freeUntil);
+        if (!date) return false;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return today.getTime() <= date.getTime();
     }
 
     /************************************************************
@@ -2762,9 +2886,13 @@
         <td>${escapeHtml(formatDate(row.deliveryDate))}</td>
         <td>${escapeHtml(row.modelCode)}</td>
         <td>${escapeHtml(row.modelName)}</td>
+        <td class="tmNumericCell"><span class="tmBadgeNeutral">${escapeHtml(displayValue(row.remainingFree))}</span></td>
+        <td>${escapeHtml(displayValue(row.freeUntil))}</td>
+        <td><span class="${row.freeStatus === 'FREE' ? 'tmBadgeOk' : 'tmBadgeWarn'}">${escapeHtml(displayValue(row.freeStatus))}</span></td>
         ${MAIN_SERVICE_OPERATIONS.map(operation => `
           <td>${escapeHtml(displayValue(row[`repairDate${operation}`]))}</td>
           <td><span class="${row[`service${operation}`] === '-' ? 'tmBadgeWarn' : 'tmBadgeOk'}">${escapeHtml(displayValue(row[`service${operation}`]))}</span></td>
+          ${renderBranchCell(row, operation)}
         `).join('')}
       </tr>
     `).join('');
@@ -2992,13 +3120,26 @@
         logTerminal(`CSV Format Utama diexport. Total baris: ${mainResults.length}.`, 'success');
     }
 
+    function exportMainExcel() {
+        if (!mainResults.length) {
+            logTerminal('Tidak ada data Format Utama untuk diexport ke Excel.', 'warn');
+            return;
+        }
+
+        downloadExcel(getMainCSVHeaders(), mainResults, 'claim-detail-format-utama');
+        logTerminal(`Excel Format Utama diexport. Total baris: ${mainResults.length}.`, 'success');
+    }
+
     function getMainCSVHeaders() {
         const headers = [
             { label: 'No', key: 'no' },
             { label: 'VIN', key: 'vin' },
             { label: 'deliveryDate', key: 'deliveryDate' },
             { label: 'modelCode', key: 'modelCode' },
-            { label: 'modelName', key: 'modelName' }
+            { label: 'modelName', key: 'modelName' },
+            { label: 'REMAINING FREE', key: 'remainingFree' },
+            { label: 'FREE UNTIL', key: 'freeUntil' },
+            { label: 'FREE STATUS', key: 'freeStatus' }
         ];
 
         for (const operation of MAIN_SERVICE_OPERATIONS) {
@@ -3006,6 +3147,9 @@
                 { label: 'RepairDate', key: `repairDate${operation}` },
                 { label: operation, key: `service${operation}` }
             );
+            if (showBranchColumns) {
+                headers.push({ label: 'BRANCH', key: `branch${operation}` });
+            }
         }
 
         return headers;
@@ -3055,6 +3199,8 @@
             'vin',
             'claimCount',
             'remainingFree',
+            'freeUntil',
+            'freeStatus',
             'modelCode',
             'modelName',
             'epCodeDealer',
@@ -3068,6 +3214,26 @@
 
         downloadCSV(headers, summaryResults, 'claim-detail-format2-summary');
         logTerminal(`CSV Format2 Summary diexport. Total baris: ${summaryResults.length}.`, 'success');
+    }
+
+    function downloadExcel(headers, rows, filenamePrefix) {
+        const normalizedHeaders = headers.map(header => typeof header === 'string' ? { label: header, key: header } : header);
+        const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+          table{border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:12px}th,td{border:1px solid #d9e2f3;padding:6px 8px;white-space:nowrap}th{background:#1f4e78;color:#fff;font-weight:700;text-align:center}tr:nth-child(even) td{background:#eef5ff}.colRemain{background:#fff2cc;font-weight:700;text-align:center}.colUntil{background:#e2f0d9;text-align:center}.statusFree{background:#c6efce;color:#006100;font-weight:700;text-align:center}.statusPaid{background:#ffc7ce;color:#9c0006;font-weight:700;text-align:center}.vin{color:#0563c1;font-weight:700}.serviceOk{background:#c6efce;color:#006100;font-weight:700;text-align:center}.serviceEmpty{background:#fce4d6;color:#9c0006;text-align:center}
+        </style></head><body><table><thead><tr>${normalizedHeaders.map(header => `<th>${escapeHtml(header.label)}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${normalizedHeaders.map(header => {
+            const value = formatCSVValue(header, row[header.key] ?? '');
+            const key = String(header.key || '');
+            let cls = '';
+            if (key === 'vin') cls = 'vin';
+            if (key === 'remainingFree') cls = 'colRemain';
+            if (key === 'freeUntil') cls = 'colUntil';
+            if (key === 'freeStatus') cls = String(value).toUpperCase() === 'FREE' ? 'statusFree' : 'statusPaid';
+            if (key.startsWith('service')) cls = String(value) === '-' ? 'serviceEmpty' : 'serviceOk';
+            return `<td class="${cls}">${escapeHtml(value)}</td>`;
+        }).join('')}</tr>`).join('')}</tbody></table></body></html>`;
+
+        const blob = new Blob(['\uFEFF' + html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+        triggerDownload(blob, filenamePrefix, 'xls');
     }
 
     function downloadCSV(headers, rows, filenamePrefix) {
@@ -3090,6 +3256,10 @@
             type: 'text/csv;charset=utf-8;'
         });
 
+        triggerDownload(blob, filenamePrefix, 'csv');
+    }
+
+    function triggerDownload(blob, filenamePrefix, extension) {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
 
@@ -3099,7 +3269,7 @@
         .slice(0, 19);
 
         a.href = url;
-        a.download = `${filenamePrefix}-${ts}.csv`;
+        a.download = `${filenamePrefix}-${ts}.${extension}`;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -3160,6 +3330,16 @@
         }
 
         return str;
+    }
+
+    function parseDisplayDate(value) {
+        const formatted = formatDate(value);
+        const match = String(formatted || '').trim().match(/^(\d{2})-(\d{2})-(\d{4})$/);
+        if (!match) return null;
+        const date = new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
+        if (Number.isNaN(date.getTime())) return null;
+        date.setHours(0, 0, 0, 0);
+        return date;
     }
 
     function formatDateParts(year, month, day) {
@@ -3391,7 +3571,7 @@
 
       .tmFiltersBar {
         display: grid;
-        grid-template-columns: repeat(4, minmax(104px, 136px)) 118px minmax(230px, 1fr) 132px;
+        grid-template-columns: repeat(4, minmax(104px, 136px)) 118px minmax(230px, 1fr) 118px 124px;
         align-items: center;
         gap: 20px;
         padding: 18px 22px;
@@ -3956,7 +4136,7 @@
       }
 
       .tmFiltersBar {
-        grid-template-columns: repeat(4, minmax(128px, 160px)) 132px minmax(260px, 1fr) 144px;
+        grid-template-columns: repeat(4, minmax(128px, 160px)) 132px minmax(260px, 1fr) 118px 124px;
         gap: 16px;
         padding: 20px 24px;
         background: #ffffff;
@@ -4426,45 +4606,25 @@
       </div>
 
       <div class="tmPageHeader">
-        <div class="tmPageTitle"><strong id="tmPageCount">0</strong> Claims</div>
+        <div class="tmPageTitle"><strong id="tmPageCount">0</strong> Claims <span id="tmPageSuccessCount">0</span> Success <span id="tmPageFailedCount">0</span> Failed</div>
         <div class="tmViewSwitch">
           <button class="tmTabBtn" data-tab="input">Input View</button>
           <button class="tmTabBtn active" data-tab="hasil">List View</button>
           <button class="tmTabBtn" data-tab="terminal">Terminal</button>
         </div>
         <div class="tmPageActions">
-          <button class="tmPrimaryBtn" id="tmStartBtn" type="button">Input Vin</button>
           <button class="tmSoftBtn" id="tmPauseBtn" type="button">Pause</button>
           <button class="tmSoftBtn" id="tmContinueBtn" type="button">Continue</button>
           <button class="tmSoftBtn" id="tmStopBtn" type="button">Stop</button>
+          <button class="tmSoftBtn" id="tmRetryErrorBtn" type="button">Retry Failed</button>
           <button class="tmSoftBtn" id="tmClearListBtn" type="button">Clear List</button>
           <button class="tmSoftBtn" id="tmClearTerminalBtn" type="button">Clear Log</button>
         </div>
       </div>
 
       <div class="tmFiltersBar">
-        <div class="tmFilterBox">
-          <label for="tmWmiInput">WMI</label>
-          <input id="tmWmiInput" maxlength="3" placeholder="MHK" />
-        </div>
-        <div class="tmFilterBox">
-          <label for="tmVdsInput">VDS</label>
-          <input id="tmVdsInput" maxlength="6" placeholder="A6GJ3J" />
-        </div>
-        <div class="tmFilterBox">
-          <label for="tmCdInput">CD</label>
-          <input id="tmCdInput" maxlength="1" placeholder="-" />
-        </div>
-        <div class="tmFilterBox">
-          <label for="tmVisInput">VIS</label>
-          <input id="tmVisInput" maxlength="8" placeholder="PJ041620" />
-        </div>
-        <button class="tmActionBtn" id="tmSearchPartsBtn" type="button">Search Parts</button>
-        <div class="tmSearchBox">
-          <input id="tmResultSearchInput" placeholder="Search for a VIN or model" />
-          <span><svg class="tmTopIcon" viewBox="0 0 24 24" fill="none"><path d="m20 20-4.2-4.2M18 11a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" stroke="currentColor" stroke-width="2"/></svg></span>
-        </div>
-        <button class="tmActionBtn" id="tmExportMainBtn" type="button">Export to CSV</button>
+        <button class="tmActionBtn" id="tmExportMainBtn" type="button">Export CSV</button>
+        <button class="tmActionBtn tmExcelBtn" id="tmExportExcelBtn" type="button">Export Excel</button>
       </div>
 
       <div id="tmMainContent">
@@ -4496,7 +4656,7 @@
               <div id="tmCounter">0 / 0</div>
 
               <div class="tmHelpBox">
-                Format utama diexport lewat tombol Export to CSV. Kolom filter WMI/VDS/CD/VIS menggantikan Owner, Group, dan Radius pada layout referensi.
+                Gunakan Export CSV atau Export Excel berwarna. Tombol Retry Failed hanya mengulang VIN yang gagal / tidak ditemukan.
               </div>
             </aside>
           </div>
@@ -4519,18 +4679,27 @@
                   <th>deliveryDate</th>
                   <th>modelCode</th>
                   <th>modelName</th>
+                  <th>REMAINING FREE</th>
+                  <th>FREE UNTIL</th>
+                  <th>FREE STATUS</th>
                   <th>RepairDate</th>
                   <th>10000K</th>
+                  <th class="tmBranchHeader">BRANCH</th>
                   <th>RepairDate</th>
                   <th>20000K</th>
+                  <th class="tmBranchHeader">BRANCH</th>
                   <th>RepairDate</th>
                   <th>30000K</th>
+                  <th class="tmBranchHeader">BRANCH</th>
                   <th>RepairDate</th>
                   <th>40000K</th>
+                  <th class="tmBranchHeader">BRANCH</th>
                   <th>RepairDate</th>
                   <th>50000K</th>
+                  <th class="tmBranchHeader">BRANCH</th>
                   <th>RepairDate</th>
                   <th>60000K</th>
+                  <th class="tmBranchHeader">BRANCH</th>
                 </tr>
               </thead>
               <tbody id="tmResultBody"></tbody>
@@ -4547,20 +4716,27 @@
       document.documentElement.appendChild(panel);
       ensureToastHost();
 
-      document.getElementById('tmStartBtn').addEventListener('click', () => {
+      const on = (id, event, handler) => {
+          const el = document.getElementById(id);
+          if (el) el.addEventListener(event, handler);
+      };
+
+      on('tmStartBtn', 'click', () => {
           switchTab('input');
       });
-      document.getElementById('tmStartBulkBtn').addEventListener('click', startProcess);
-      document.getElementById('tmSearchPartsBtn').addEventListener('click', startPartsSearch);
-      document.getElementById('tmSearchPartsSideBtn').addEventListener('click', startPartsSearch);
-      document.getElementById('tmPauseBtn').addEventListener('click', pauseProcess);
-      document.getElementById('tmContinueBtn').addEventListener('click', continueProcess);
-      document.getElementById('tmStopBtn').addEventListener('click', stopProcess);
-      document.getElementById('tmClearListBtn').addEventListener('click', clearListView);
-      document.getElementById('tmClearTerminalBtn').addEventListener('click', clearTerminalLog);
-      document.getElementById('tmExportMainBtn').addEventListener('click', exportMainCSV);
-      document.getElementById('tmResultSearchInput').addEventListener('input', filterResultRows);
-      document.getElementById('tmVinInput').addEventListener('input', updateVinBulkCount);
+      on('tmStartBulkBtn', 'click', startProcess);
+      on('tmSearchPartsBtn', 'click', startPartsSearch);
+      on('tmSearchPartsSideBtn', 'click', startPartsSearch);
+      on('tmPauseBtn', 'click', pauseProcess);
+      on('tmContinueBtn', 'click', continueProcess);
+      on('tmStopBtn', 'click', stopProcess);
+      on('tmRetryErrorBtn', 'click', retryErrorProcess);
+      on('tmClearListBtn', 'click', clearListView);
+      on('tmClearTerminalBtn', 'click', clearTerminalLog);
+      on('tmExportMainBtn', 'click', exportMainCSV);
+      on('tmExportExcelBtn', 'click', exportMainExcel);
+      on('tmResultSearchInput', 'input', filterResultRows);
+      on('tmVinInput', 'input', updateVinBulkCount);
 
       document.querySelectorAll('.tmTabBtn').forEach(btn => {
           btn.addEventListener('click', () => {
@@ -4571,7 +4747,7 @@
       attachDummyActionToasts(panel);
       registerUISlashShortcut();
 
-      logTerminal('UI fullscreen CRM siap. Export to CSV memakai Format Utama.', 'info');
+      logTerminal('UI fullscreen CRM siap. Export CSV dan Excel memakai Format Utama.', 'info');
       logTerminal('Filter WMI/VDS/CD/VIS siap untuk pencarian langsung split VIN.', 'success');
 
       const found = scanStorageForToken();
@@ -4684,6 +4860,7 @@
         }
 
         queue = [];
+        retryErrorQueue = [];
         currentIndex = 0;
         mainResults = [];
         detailResults = [];
@@ -4722,6 +4899,7 @@
         }
 
         queue = [vinInfo];
+        retryErrorQueue = [];
         mainResults = [];
         detailResults = [];
         summaryResults = [];
@@ -4793,9 +4971,37 @@
         });
     }
 
+    function toggleBranchColumns() {
+        showBranchColumns = !showBranchColumns;
+        updateBranchToggleUI();
+        renderMainResults();
+    }
+
+    function updateBranchToggleUI() {
+        const btn = document.getElementById('tmToggleBranchBtn');
+        if (btn) btn.textContent = showBranchColumns ? 'Hide Branch' : 'Show Branch';
+        document.querySelectorAll('.tmBranchHeader').forEach(el => {
+            el.style.display = showBranchColumns ? '' : 'none';
+        });
+    }
+
     function updateListCount() {
-        const el = document.getElementById('tmPageCount');
-        if (el) el.textContent = String(mainResults.length || 0);
+        const totalEl = document.getElementById('tmPageCount');
+        const successEl = document.getElementById('tmPageSuccessCount');
+        const failedEl = document.getElementById('tmPageFailedCount');
+        const failedKeys = new Set(retryErrorQueue.map(item => normalizeVIN(item.vin)));
+        let failedCount = 0;
+        let successCount = 0;
+
+        for (const row of mainResults) {
+            const isFailed = row.freeStatus === 'ERROR' || failedKeys.has(normalizeVIN(row.vin));
+            if (isFailed) failedCount++;
+            else successCount++;
+        }
+
+        if (totalEl) totalEl.textContent = String(mainResults.length || 0);
+        if (successEl) successEl.textContent = String(successCount);
+        if (failedEl) failedEl.textContent = String(failedCount);
     }
 
     function waitDOMReady() {
@@ -4809,3 +5015,5 @@
     waitDOMReady();
 
 })();
+
+
