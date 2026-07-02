@@ -6,11 +6,15 @@
 // @author       magenta project
 // @match        https://passport.toyota.astra.co.id:5004/*
 // @run-at       document-start
-// @grant        none
+// @grant        GM_xmlhttpRequest
+// @grant        unsafeWindow
+// @connect      jdhwlfuxyybbxsgmvfdg.supabase.co
 // ==/UserScript==
 
 (function () {
     'use strict';
+
+    const PAGE_WINDOW = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
 
     /************************************************************
    * CONFIG
@@ -36,18 +40,47 @@
     let REQUEST_DELAY_MS = DEFAULT_REQUEST_DELAY_MS;
     const FREE_LIMIT = 6;
     const MAIN_SERVICE_OPERATIONS = ['10000K', '20000K', '30000K', '40000K', '50000K', '60000K'];
+    const DEALER_BRANCH_SYNCED_AT_STORAGE_KEY = 'tm_dealer_branch_synced_at';
+    const SUPABASE_URL = 'https://jdhwlfuxyybbxsgmvfdg.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpkaHdsZnV4eXliYnhzZ212ZmRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5NjEwMTcsImV4cCI6MjA5ODUzNzAxN30.VTIKo5olo4Je-Q3IS5MqrekMe5htR9yw9eYQBIojabc';
+    const SUPABASE_DEALER_BRANCH_TABLE = 'dealer_branches';
+    const SUPABASE_DEALER_BRANCH_ENDPOINT = `${SUPABASE_URL}/rest/v1/${SUPABASE_DEALER_BRANCH_TABLE}`;
 
     const DEFAULT_DEALER_BRANCH_MAP = {"VS33": "KARTIKA SARI - MALANG", "AA01": "AGUNG TOYOTA PEKANBARU 1", "AA02": "AGUNG TOYOTA JAMBI 1", "AA03": "AGUNG TOYOTA BENGKULU", "AA05": "AGUNG TOYOTA DENPASAR", "AA06": "AGUNG TOYOTA BATAM", "AA07": "AGUNG TOYOTA DURI", "AA08": "AGUNG TOYOTA GIANYAR", "AA09": "AGUNG TOYOTA SM Amin Pekan Baru 3 )", "AA10": "AGUNG TOYOTA KUTA", "AA11": "AGUNG TOYOTA MUARA BUNGO", "AA12": "AGUNG TOYOTA SEKUPANG", "AA13": "AGUNG TOYOTA TANJUNG PINANG", "AA14": "AGUNG TOYOTA TABANAN", "AA16": "AGUNG TOYOTA PANGKALAN KERINCI", "AA17": "AGUNG TOYOTA JAMBI 2", "AA18": "AGUNG TOYOTA PEKANBARU 4", "AA19": "AGUNG TOYOTA BAGAN BATU", "AA20": "AGUNG TOYOTA UJUNG BATU", "AA21": "AGUNG TOYOTA SINGARAJA", "AA22": "AGUNG TOYOTA TELUK KUANTAN", "AA23": "AGUNG TOYOTA DUMAI", "AA24": "AGUNG TOYOTA BATAM CENTER", "AJ01": "ASTRIDO TOYOTA KEBON JERUK", "AJ02": "ASTRIDO TOYOTA BANDENGAN", "AJ03": "ASTRIDO TOYOTA TANGERANG", "AJ04": "ASTRIDO TOYOTA FATMAWATI", "AJ05": "ASTRIDO TOYOTA YOS SUDARSO", "AJ06": "ASTRIDO TOYOTA PONDOK GEDE", "AJ07": "ASTRIDO TOYOTA PONDOK INDAH", "AJ08": "ASTRIDO TOYOTA BEKASI", "AJ09": "ASTRIDO TOYOTA KELAPA GADING", "AJ10": "ASTRIDO TOYOTA KARAWACI", "AJ11": "ASTRIDO TOYOTA PONDOK CABE", "AJ12": "ASTRIDO TOYOTA KARAWANG (VSP )", "AJ13": "ASTRIDO TOYOTA CILEUNGSI", "AJ14": "ASTRIDO TOYOTA BITUNG", "AJ15": "ASTRIDO TOYOTA BITUNG", "AS02": "AUTO2000 - KALIMALANG", "AS03": "AUTO2000 - PLUIT", "AS04": "AUTO2000 - GARUDA", "AS06": "AUTO2000 - TEBET SUPOMO", "AS09": "AUTO2000 - DAAN MOGOT", "AS10": "AUTO2000 - P. JAYAKARTA", "AS100": "AUTO2000 -  CIBIRU - BP", "AS101": "AUTO2000 -  KENJERAN - BP", "AS102": "AUTO2000 -  MEDAN AMPLAS - BP", "AS103": "AUTO2000 -  BALIKPAPAN  II  JL.MT.HARYONO", "AS104": "AUTO2000 - KAPUK", "AS105": "AUTO2000 -  AMPLAS", "AS106": "AUTO2000 -  BOGOR  II  JL.YASMIN", "AS107": "AUTO2000 -  CIBIRU - GR", "AS108": "AUTO2000 -  MALANG -  SUKUN", "AS109": "AUTO2000 -  KEDIRI", "AS110": "AUTO2000 -  KERTAJAYA", "AS111": "AUTO2000 -  KENJERAN", "AS112": "AUTO2000 - CIKARANG", "AS113": "AUTO2000 - BEKASI BARAT", "AS114": "AUTO2000 - BEKASI TIMUR - BP", "AS115": "AUTO2000 - PONDOK JAGUNG-BP", "AS116": "AUTO2000 -  SAMARINDA", "AS117": "AUTO2000 - LENTENG AGUNG", "AS118": "AUTO2000 -  SANUR", "AS119": "AUTO2000 - CIKOKOL TANGERANG", "AS12": "AUTO2000 - SALEMBA", "AS120": "AUTO2000 -  KARAWANG -BP", "AS121": "AUTO2000 -  SANUR - BP", "AS122": "AUTO2000 -  CIREBON - BP", "AS123": "AUTO2000 -  BYPASS PADANG BP", "AS124": "AUTO2000 -  WAY HALIM BP", "AS126": "AUTO2000 -  SAMARINDA - BP", "AS127": "AUTO2000 -  INDRAMAYU", "AS128": "AUTO2000 -  TUBAN", "AS129": "AUTO2000 -  BOGOR  YASMIN BP", "AS13": "AUTO2000 - CILANDAK", "AS130": "AUTO2000 -  TABANAN", "AS131": "AUTO2000 - PERMATA HIJAU", "AS132": "AUTO2000 -  SETIABUDI BANDUNG", "AS133": "AUTO2000 -  TANJUNG API - API", "AS134": "AUTO2000 -  BALIKPAPAN BP (Balikpapan 3)", "AS135": "AUTO2000 -  SINGOSARI- BP", "AS136": "AUTO2000 -  JEMBER - BP", "AS137": "AUTO2000 - KELAPA GADING", "AS138": "AUTO2000 - SERANG", "AS139": "AUTO2000 -  TANJUNG API - API - BP", "AS140": "AUTO2000 -  MEDAN PANCING", "AS141": "AUTO2000 - SERANG - BP", "AS142": "AUTO2000 -  BANDUNG SUCI", "AS143": "AUTO2000 -  BYPASS PADANG", "AS144": "AUTO2000 -  PURWAKARTA", "AS145": "AUTO2000 - KRIDA", "AS146": "AUTO2000 - ALAM SUTERA", "AS147": "AUTO2000 -  SBY WIYUNG", "AS148": "AUTO2000 - CIKUPA ( VSP)", "AS149": "AUTO2000 -  RANCAEKEK ( VSP - PDC)", "AS150": "AUTO2000 -  GIANYAR ( VSP)", "AS151": "AUTO2000 - BONTANG", "AS152": "AUTO2000 - PROBOLINGGO", "AS153": "AUTO2000 - KEDIRI 2 SUHARMAJI", "AS154": "AUTO2000 - BANYUWANGI", "AS155": "AUTO2000 -  BUKIT TINGGI", "AS156": "AUTO2000 SINGARAJA", "AS157": "AUTO2000 PONTIANAK", "AS158": "AUTO2000 - KEDIRI 2 SUHARMAJI BP", "AS159": "AUTO2000 MANYAR GRESIK", "AS16": "AUTO2000 -  ASIA AFRIKA", "AS160": "AUTO2000 ACHMAD YANI BANJARMASIN", "AS161": "AUTO2000 MAJALENGKA", "AS162": "AUTO2000 -  SUKABUMI", "AS164": "AUTO2000 BINJAI", "AS165": "AUTO2000 TULANG BAWANG", "AS166": "AUTO2000 DRAMAGA", "AS167": "AUTO2000 MEDAN MARELAN", "AS168": "AUTO2000 WAYHALIM", "AS169": "AUTO2000 BSD CITY ( ASTRA BIZ CENTER )", "AS17": "AUTO2000 -  SOEKARNO HATTA - GR", "AS170": "AUTO2000 PASAR KEMIS GR", "AS171": "AUTO2000 JATIASIH", "AS172": "AUTO2000 PASAR KEMIS BP", "AS173": "AUTO2000 GRAND DEPOK CITY", "AS174": "AUTO2000 PANDEGLANG", "AS175": "AUTO2000 TANJUNG MORAWA", "AS176": "AUTO2000 BATURAJA", "AS177": "AUTO2000 TULUNG AGUNG", "AS178": "AUTO2000 PASURUAN VSP", "AS179": "AUTO2000 JOMBANG", "AS18": "AUTO2000 -  PASTEUR", "AS180": "AUTO2000 RANTAU PRAPAT", "AS181": "AUTO2000 KISARAN", "AS182": "AUTO2000 KOTABUMI", "AS183": "AUTO2000 SANGATTA", "AS184": "AUTO2000 KALIANDA", "AS185": "AUTO2000 SINGOSARI", "AS186": "AUTO2000 SUKABUMI BP", "AS187": "AUTO2000 - CIKARANG UTARA", "AS188": "AUTO2000 KUNINGAN", "AS189": "AUTO2000 CIKAMPEK", "AS190": "AUTO2000 MUSI BANYUASIN ( SEKAYU )", "AS191": "AUTO2000 TENGGARONG", "AS20": "AUTO2000 -  BOGOR I JL.SILIWANGI", "AS23": "AUTO2000 -  CIBINONG", "AS25": "AUTO2000 -  CIREBON -GR", "AS29": "AUTO2000 -  SUNGKONO/ HR MOHAMMAD", "AS31": "AUTO2000 -  BASUKI RACHMAT", "AS32": "AUTO2000 -  WARU - GR", "AS33": "AUTO2000 -  PECINDILAN", "AS35": "AUTO2000 -  DENPASAR", "AS37": "AUTO2000 -  ACHMAD YANI", "AS38": "AUTO2000 -  JEMUR SARI", "AS40": "AUTO2000 -  BALIKPAPAN  I  JL.SUDIRMAN", "AS45": "AUTO2000 -  MEDAN SM RAJA", "AS47": "AUTO2000 -  GATOT SOEBROTO", "AS50": "AUTO2000 -  PADANG - GR", "AS55": "AUTO2000 -  PALEMBANG PLAJU", "AS60": "AUTO2000 -  MALANG I JL. SOETOYO", "AS65": "AUTO2000 -  TANJUNG KARANG I - RADEN INTAN", "AS66": "AUTO2000 -  TANJUNG KARANG II - RAJABASA HAJIMENA", "AS73": "AUTO2000 - BINTARO JAYA", "AS74": "AUTO2000 - PRAMUKA", "AS77": "AUTO2000 -  MADIUN", "AS80": "AUTO2000 -  JEMBER", "AS84": "AUTO2000 - CEMPAKA PUTIH", "AS86": "AUTO2000 - RADIO DALAM", "AS87": "AUTO2000 - CILEDUG", "AS88": "AUTO2000 - BEKASI TIMUR - GR", "AS89": "AUTO2000 -  KARAWANG GR", "AS90": "AUTO2000 - YOS SUDARSO", "AS91": "AUTO2000 - KRAMAT JATI", "AS92": "AUTO2000 - TEBET SAHARJO", "AS94": "AUTO2000 - PURI KEMBANGAN", "AS96": "AUTO2000 - CILEDUG BP", "AS98": "AUTO2000 - BUMI SERPONG DAMAI", "AS99": "AUTO2000 - SUNTER - BP", "HA01": "HASJRAT ABADI MANADO  I  JL.RAYA KOMBOS", "HA02": "HASJRAT ABADI GORONTALO", "HA03": "HASJRAT ABADI PALU", "HA04": "HASJRAT ABADI AMBON", "HA05": "HASJRAT ABADI KOTAMOBAGU", "HA06": "HASJRAT ABADI JAYAPURA", "HA07": "HASJRAT ABADI SORONG", "HA08": "HASJRAT ABADI BIAK", "HA09": "HASJRAT ABADI NABIRE", "HA10": "HASJRAT ABADI TIMIKA", "HA11": "HASJRAT ABADI LUWUK", "HA12": "HASJRAT ABADI MANADO  II  JL.SUDIRMAN", "HA13": "HASJRAT ABADI MERAUKE", "HA14": "HASJRAT ABADI ABEPURA", "HA15": "HASJRAT ABADI TENDEAN ( MANADO III )", "HA17": "HASJRAT ABADI MUTIARA - PALU", "HA18": "HASJRAT ABADI DURIAN - PALU - BP", "HA19": "HASJRAT ABADI BITUNG", "HA20": "HASJRAT ABADI LIMBOTO - GORONTALO", "HK01": "HADJI KALLA URIP MAKASAR", "HK02": "HADJI KALLA KENDARI", "HK03": "HADJI KALLA PARE PARE", "HK04": "HADJI KALLA PALU-JUANDA", "HK05": "HADJI KALLA BONE", "HK06": "HADJI KALLA SENGKANG", "HK07": "HADJI KALLA SIDRAP", "HK08": "HADJI KALLA POLMAN", "HK09": "HADJI KALLA PALOPO", "HK10": "HADJI KALLA BULUKUMBA", "HK11": "HADJI KALLA TANA TORAJA", "HK12": "HADJI KALLA ALAUDDIN", "HK14": "HADJI KALLA KOLAKA", "HK15": "HADJI KALLA MAMUJU", "HK16": "HADJI KALLA SERUI", "HK17": "HADJI KALLA POSO", "HK18": "HADJI KALLA MAROS", "HK19": "HADJI KALLA PALU 2-MARTADINATA", "HK20": "HADJI KALLA KALLA GOWA", "HK21": "HADJI KALLA SOPPENG", "LXS01": "LEXUS NATIONAL TECHNICAL CENTER", "LXS02": "LEXUS MAMPANG (PT ANANTA AUTO ANDALAN)", "LXS03": "LEXUS PLUIT GALLERY", "N/A": "Hadji Kalla Learing Center", "NR01": "NASMOCO PEMUDA  SEMARANG", "NR02": "NASMOCO KALIGAWE SEMARANG", "NR03": "NASMOCO SALATIGA", "NR04": "NASMOCO PURWOKERTO", "NR05": "NASMOCO CILACAP", "NR06": "NASMOCO SLAMET RIYADI - SOLO", "NR08": "SURYA INDAH MOTOR - KUDUS", "NR10": "NASMOCO TEGAL", "NR11": "NASMOCO PEKALONGAN", "NR12": "NASMOCO MLATI - YOGYAKARTA", "NR13": "NASMOCO MAGELANG", "NR14": "NASMOCO MAJAPAHIT - SEMARANG", "NR15": "NASMOCO JANTI - YOGYAKARTA", "NR16": "NASMOCO GOMBEL - SEMARANG", "NR17": "NASMOCO SOLO BARU", "NR18": "NASMOCO BANTUL", "NR19": "NASMOCO WONOSOBO", "NR20": "NASMOCO KARANG ANYAR", "NR21": "SURYA INDAH MOTOR - JEPARA", "NR22": "NASMOCO BREBES", "NR23": "NASMOCO KARANGJATI", "NR24": "NASMOCO SILIWANGI", "NR25": "NASMOCO PATI", "NR26": "NASMOCO KLATEN", "NR27": "NASMOCO PURBALINGGA", "NR28": "NASMOCO DEMAK", "TR01": "TUNAS TOYOTA CAWANG", "TR02": "TUNAS TOYOTA CILEGON", "TR03": "TUNAS TOYOTA CIPUTAT", "TR04": "TUNAS TOYOTA MAMPANG PRAPATAN", "TR05": "TUNAS TOYOTA JATINEGARA", "TR06": "TUNAS TOYOTA TANGERANG", "TR07": "TUNAS TOYOTA PASAR MINGGU", "TR08": "TUNAS TOYOTA BINTARO", "TR09": "TUNAS TOYOTA CIMINDI - BANDUNG", "TR10": "TUNAS TOYOTA KEBAYORAN LAMA", "TR11": "TUNAS TOYOTA CINERE", "TR12": "TUNAS TOYOTA GATOT SOEBROTO - BANDUNG", "TR13": "TUNAS TOYOTA LATUMENTEN", "TR14": "TUNAS TOYOTA SERANG", "TR15": "TUNAS TOYOTA BATU TULIS", "TR16": "TUNAS TOYOTA JATIWARINGIN", "TR17": "TUNAS TOYOTA RADIN INTEN", "TR18": "TUNAS TOYOTA BANDAR JAYA LAMPUNG ( TUNAS RIDEAN)", "TR19": "TUNAS TOYOTA RADIN INTEN BP", "TR20": "TUNAS TOYOTA BINTARO BP", "TR21": "TUNAS TOYOTA CILEGON BP", "TR22": "TUNAS TOYOTA CIPONDOH", "TR23": "TUNAS TOYOTA BEKASI", "TR24": "TUNAS TOYOTA BALARAJA", "TSD02": "TAM - SUNTER II", "TSD03": "LEXUS ASTRA GALLERY", "VS05": "DUNIA BARUSA - LHOKSEUMAWE", "VS07": "PERINTIS PERKASA - MEDAN", "VS10": "ANZON AUTOPLAZA - PONTIANAK", "VS102": "LIEK MOTOR - PAMEKASAN", "VS11": "WIRA MEGAH PROFITAMAS - BANJARMASIN", "VS12": "GRAHA MULIA AUTO SAMARINDA", "VS13": "AKASTRA MOTOR - PALMERAH", "VS17": "SETIAJAYA MOBILINDO - DEPOK", "VS18": "SINAR MAS - TASIKMALAYA", "VS19": "MERDEKA MOTOR - BANDUNG", "VS20": "SETIAJAYA MOBILINDO - BOGOR", "VS21": "REJEKI TOYOTA - SUMEDANG", "VS22": "SELAMAT LESTARI MANDIRI - SUKABUMI", "VS23": "DUTA CENDANA MOBILINDO - CIANJUR", "VS31": "AUTO NUSA ABADI - KUPANG", "VS32": "KRIDA TOYOTA - MATARAM", "VS35": "HASJRAT ABADI - TERNATE (dlm proses otorisasi)", "VS40": "ASTRIDO TOYOTA KLENDER", "VS42": "WIJAYA TOYOTA I - BANDUNG (Lestari)", "VS44": "SINAR SURI - MANOKWARI", "VS47": "ASRI MOTOR - SIDOARJO", "VS49": "ARINA PARAMA JAYA - GRESIK", "VS50": "TUNAS AUTOGRAHA - PALEMBANG", "VS51": "ISTANA AGUNG - PANGKAL PINANG", "VS52": "SETIAJAYA MOBILINDO - CIBUBUR", "VS53": "PLAZA TOYOTA - KYAI TAPA", "VS54": "DELTAMAS SURYA INDAH MULIA - MEDAN", "VS55": "SUTAN INDO ANEKA MOBIL - PEMATANG SIANTAR", "VS56": "LIEK MOTOR - INDRAPURA", "VS57": "REJEKI TOYOTA - CIREBON", "VS58": "INTERCOM - PADANG", "VS59": "BUDI JAYA MOBILINDO - GARUT", "VS60": "WIRA MEGAH PROFITAMAS - PALANGKARAYA", "VS61": "TUNAS AUTOGRAHA - LUBUK LINGGAU", "VS62": "SUMBER HARAPAN - TARAKAN", "VS63": "ANZON AUTOPLAZA - SINGKAWANG", "VS64": "PLAZA TOYOTA BANDUNG", "VS65": "PLAZA TOYOTA - TENDEAN", "VS66": "PLAZA TOYOTA - GREEN GARDEN", "VS67": "DUNIA BARUSA - BANDA ACEH", "VS68": "WIJAYA TOYOTA II - BANDUNG ( Dago )", "VS69": "ANZON AUTOPLAZA - SAMPIT", "VS70": "PLAZA TOYOTA - PEMUDA", "VS71": "PLAZA TOYOTA - GADING SERPONG", "VS72": "SETIAJAYA MOBILINDO - CIMANGGIS", "VS73": "WIRA MEGAH PROFITAMAS - BANJARBARU", "VS75": "ASRI MOTOR - TAMAN SIDOARJO", "VS76": "WIJAYA TOYOTA - SUBANG", "VS77": "PLAZA TOYOTA - KARANGGAN BP", "VS78": "PERINTIS PERKASA FLAMBOYAN", "VS79": "ANZON AUTO LESTARI TAMBUN", "VS80": "MERDEKA MOTOR  SOREANG", "VS81": "TUNAS AUTOGRAHA PRABUMULIH (VSP)", "VS82": "SETIAJAYA MOBILINDO - PARUNG", "VS84": "SETIAJAYA  - DEPOK BP", "VS85": "DAYA TOYOTA CAKUNG", "VS89": "WIRA MEGAH PROFITAMAS - BANJARMASIN", "VS90": "DUNIA BARUSA - MEULABOH", "VS91": "ANZON AUTOPLAZA- SINTANG", "VS92": "INDRAPURA MEGAH MAKMUR", "VS93": "WIJAYA TOYOTA- PADALARANG", "VS94": "PLAZA TOYOTA CITEREUP", "VS95": "DELTAMAS SURYA INDAH MULIA - BP", "VS96": "REJEKI TOYOTA INDRAMAYU", "VS97": "JD TOYOTA JABABEKA CIKARANG", "VS98": "DAYA TOYOTA BEKASI"};
 
-    let DEALER_BRANCH_MAP = { ...DEFAULT_DEALER_BRANCH_MAP };
+    function normalizeDealerBranchCode(value) {
+        return String(value ?? '').trim().toUpperCase().replace(/\s+/g, '');
+    }
+
+    function normalizeDealerBranchMap(source) {
+        const normalized = {};
+        if (!source || typeof source !== 'object') return normalized;
+
+        for (const [code, name] of Object.entries(source)) {
+            const normalizedCode = normalizeDealerBranchCode(code);
+            const normalizedName = String(name ?? '').trim();
+            if (normalizedCode && normalizedName) {
+                normalized[normalizedCode] = normalizedName;
+            }
+        }
+
+        return normalized;
+    }
+
+    let DEALER_BRANCH_MAP = {};
+    let dealerBranchLastSyncAt = '';
+    let dealerBranchOnlineLoaded = false;
+    let dealerBranchSyncState = {
+        type: 'warn',
+        message: 'Menunggu Supabase'
+    };
 
     function loadSettings() {
         try {
             const savedDelay = localStorage.getItem('tm_request_delay_ms');
             if (savedDelay) REQUEST_DELAY_MS = parseInt(savedDelay, 10);
 
-            const savedMap = localStorage.getItem('tm_dealer_branch_map');
-            if (savedMap) DEALER_BRANCH_MAP = JSON.parse(savedMap);
+            dealerBranchLastSyncAt = localStorage.getItem(DEALER_BRANCH_SYNCED_AT_STORAGE_KEY) || '';
         } catch (e) {
             console.error('Failed to load settings', e);
         }
@@ -92,7 +125,7 @@
 
         if (value.toLowerCase().startsWith('bearer ')) {
             capturedAuthorization = value;
-            window.__passportClaimAuth = value;
+            PAGE_WINDOW.__passportClaimAuth = value;
             logTerminal('Authorization hijacked, session injected.', 'success');
             updateAuthStatus();
         }
@@ -151,8 +184,8 @@
         return false;
     }
 
-    const originalFetch = window.fetch;
-    window.fetch = async function (...args) {
+    const originalFetch = PAGE_WINDOW.fetch;
+    PAGE_WINDOW.fetch = async function (...args) {
         try {
             const input = args[0];
             const init = args[1] || {};
@@ -163,7 +196,7 @@
                 setCapturedAuth(auth);
             }
 
-            if (input instanceof Request) {
+            if (input && input.headers && typeof input.headers.get === 'function') {
                 const auth = input.headers.get('authorization');
                 setCapturedAuth(auth);
             }
@@ -172,15 +205,16 @@
         return originalFetch.apply(this, args);
     };
 
-    const originalOpen = XMLHttpRequest.prototype.open;
-    const originalSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
+    const PageXMLHttpRequest = PAGE_WINDOW.XMLHttpRequest || XMLHttpRequest;
+    const originalOpen = PageXMLHttpRequest.prototype.open;
+    const originalSetRequestHeader = PageXMLHttpRequest.prototype.setRequestHeader;
 
-    XMLHttpRequest.prototype.open = function (...args) {
+    PageXMLHttpRequest.prototype.open = function (...args) {
         this.__tm_url = args[1];
         return originalOpen.apply(this, args);
     };
 
-    XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
+    PageXMLHttpRequest.prototype.setRequestHeader = function (name, value) {
         try {
             if (String(name).toLowerCase() === 'authorization') {
                 setCapturedAuth(value);
@@ -1651,9 +1685,25 @@
             btn.classList.toggle('active', btn.dataset.tab === tabName);
         });
 
-        document.getElementById('tmTabInput').classList.toggle('active', tabName === 'input');
-        document.getElementById('tmTabHasil').classList.toggle('active', tabName === 'hasil');
-        document.getElementById('tmTabTerminal').classList.toggle('active', tabName === 'terminal');
+        document.getElementById('tmTabInput')?.classList.toggle('active', tabName === 'input');
+        document.getElementById('tmTabHasil')?.classList.toggle('active', tabName === 'hasil');
+        document.getElementById('tmTabTerminal')?.classList.toggle('active', tabName === 'terminal');
+        document.getElementById('tmTabSettings')?.classList.toggle('active', tabName === 'settings');
+
+        if (tabName === 'settings') {
+            renderSettingsTab();
+            if (!dealerBranchOnlineLoaded) {
+                void refreshDealerBranchesFromSupabase({ render: true, silent: true })
+                    .catch(err => {
+                        saveDealerBranchMapLocal({});
+                        renderSettingsTab();
+                        setDealerBranchSyncState('error', 'Supabase gagal');
+                        setSettingsMessage(err.message || String(err), 'error');
+                        updateDealerBranchSummary();
+                        logTerminal(`Supabase branch map belum tersinkron: ${err.message || err}`, 'warn');
+                    });
+            }
+        }
     }
 
     function makeDraggable(panel, handle) {
@@ -2496,9 +2546,22 @@
     }
 
     function getBranchNameByDealerCode(code) {
-        const normalizedCode = String(code || '').trim().toUpperCase();
+        const normalizedCode = normalizeDealerBranchCode(code);
         if (!normalizedCode || normalizedCode === '-') return '-';
         return DEALER_BRANCH_MAP[normalizedCode] || '-';
+    }
+
+    function refreshBranchNamesInResults() {
+        if (!mainResults.length) return;
+
+        for (const row of mainResults) {
+            for (const operation of MAIN_SERVICE_OPERATIONS) {
+                const dealerCode = row[`service${operation}`];
+                row[`branch${operation}`] = getBranchNameByDealerCode(dealerCode);
+            }
+        }
+
+        renderMainResults();
     }
 
     function renderBranchCell(row, operation) {
@@ -3973,24 +4036,359 @@
         .tmInputLayout {
           grid-template-columns: 1fr;
         }
+
       }
 
       /* Settings UI */
-      .tmSettingsSection { margin-bottom: 24px; }
-      .tmSettingsSection h3 { font-size: 15px; font-weight: 800; color: #111827; margin-bottom: 12px; }
-      .tmSettingsRow { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-      .tmSettingsInput { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; width: 140px; }
-      .tmDealerList { max-height: 400px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin-bottom: 12px; background: #fcfcfd;}
-      .tmDealerRow { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
-      .tmDealerInputCode { width: 120px; }
-      .tmDealerInputName { flex: 1; width: auto; }
-      .tmBtnSmall { padding: 6px 12px; font-size: 13px; font-weight: 600; border-radius: 6px; border: 1px solid #d1d5db; background: #fff; cursor: pointer; color: #374151; }
-      .tmBtnSmall:hover { background: #f3f4f6; }
-      .tmBtnDanger { color: #dc2626; border-color: #fca5a5; background: #fef2f2; }
-      .tmBtnDanger:hover { background: #fee2e2; }
-      .tmBtnPrimary { background: #2563eb; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 700;}
-      .tmBtnPrimary:hover { background: #1d4ed8; }
-      .tmSettingsActions { display: flex; gap: 8px; margin-top: 12px; }
+      #tmTabSettings.active {
+        display: block;
+        height: 100%;
+        overflow: auto;
+        padding: 24px;
+        background: var(--tm-bg);
+      }
+
+      .tmSettingsWorkspace {
+        width: min(1180px, 100%);
+        margin: 0 auto;
+        display: grid;
+        gap: 18px;
+      }
+
+      .tmSettingsHero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 24px;
+        align-items: end;
+        padding: 22px 24px;
+        border: 1px solid var(--tm-line);
+        border-radius: 12px;
+        background: #ffffff;
+        box-shadow: 0 12px 30px rgba(15, 23, 42, .06);
+      }
+
+      .tmSettingsEyebrow {
+        margin: 0 0 6px;
+        color: #64748b;
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+      }
+
+      .tmSettingsHero h2 {
+        margin: 0;
+        color: var(--tm-ink);
+        font-size: 24px;
+        font-weight: 850;
+        letter-spacing: 0;
+      }
+
+      .tmSettingsHero p {
+        margin: 8px 0 0;
+        max-width: 720px;
+        color: var(--tm-helper);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .tmSettingsStats {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(132px, 1fr));
+        gap: 10px;
+        min-width: 300px;
+      }
+
+      .tmSettingsStat {
+        min-height: 76px;
+        padding: 12px 14px;
+        border: 1px solid var(--tm-line);
+        border-radius: 10px;
+        background: #f8fafc;
+      }
+
+      .tmSettingsStat span {
+        display: block;
+        color: #64748b;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .tmSettingsStat strong {
+        display: block;
+        margin-top: 8px;
+        color: var(--tm-ink);
+        font-size: 22px;
+        font-weight: 850;
+      }
+
+      .tmSettingsGrid {
+        display: grid;
+        grid-template-columns: 280px minmax(0, 1fr);
+        gap: 18px;
+        align-items: start;
+      }
+
+      .tmSettingsCard {
+        border: 1px solid var(--tm-line);
+        border-radius: 12px;
+        background: #ffffff;
+        box-shadow: 0 12px 30px rgba(15, 23, 42, .06);
+        overflow: hidden;
+      }
+
+      .tmSettingsCardBody {
+        padding: 18px;
+      }
+
+      .tmSettingsCardHeader {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 20px;
+        border-bottom: 1px solid var(--tm-line);
+        background: #ffffff;
+      }
+
+      .tmSettingsCardHeader h3 {
+        margin: 0;
+        color: var(--tm-ink);
+        font-size: 17px;
+        font-weight: 850;
+      }
+
+      .tmSettingsCardHeader p {
+        margin: 5px 0 0;
+        color: var(--tm-helper);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .tmSettingsField {
+        display: grid;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+
+      .tmSettingsField label {
+        color: var(--tm-ink-soft);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .tmSettingsInput {
+        width: 100%;
+        height: 42px;
+        padding: 0 12px;
+        border: 1px solid var(--tm-line-strong);
+        border-radius: 8px;
+        color: var(--tm-ink);
+        background: #ffffff;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .tmSettingsInput:focus {
+        outline: 0;
+        border-color: var(--tm-blue);
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, .14);
+      }
+
+      .tmDealerStatus {
+        min-height: 34px;
+        display: inline-flex;
+        align-items: center;
+        padding: 0 11px;
+        border: 1px solid #bfdbfe;
+        border-radius: 999px;
+        color: #1d4ed8;
+        background: #eff6ff;
+        font-size: 12px;
+        font-weight: 850;
+        white-space: nowrap;
+      }
+
+      .tmDealerStatus.tmDealerStatusOk {
+        color: #065f46;
+        border-color: #a7f3d0;
+        background: #ecfdf5;
+      }
+
+      .tmDealerStatus.tmDealerStatusWarn {
+        color: #92400e;
+        border-color: #fde68a;
+        background: #fffbeb;
+      }
+
+      .tmDealerStatus.tmDealerStatusError {
+        color: #991b1b;
+        border-color: #fecaca;
+        background: #fef2f2;
+      }
+
+      .tmDealerToolbar {
+        display: grid;
+        grid-template-columns: minmax(220px, 1fr) auto;
+        gap: 12px;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--tm-line);
+        background: #f8fafc;
+      }
+
+      .tmDealerActionGroup,
+      .tmSettingsActions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .tmDealerList {
+        max-height: 480px;
+        min-height: 260px;
+        overflow: auto;
+        background: #ffffff;
+      }
+
+      .tmDealerTableHeader,
+      .tmDealerRow {
+        display: grid;
+        grid-template-columns: 64px 140px minmax(260px, 1fr) 92px;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .tmDealerTableHeader {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        min-height: 42px;
+        padding: 0 20px;
+        border-bottom: 1px solid var(--tm-line);
+        color: #64748b;
+        background: #f8fafc;
+        font-size: 12px;
+        font-weight: 850;
+        text-transform: uppercase;
+      }
+
+      .tmDealerRow {
+        min-height: 58px;
+        padding: 8px 20px;
+        border-bottom: 1px solid #edf2f7;
+      }
+
+      .tmDealerRow:hover {
+        background: #f8fbff;
+      }
+
+      .tmDealerRow.tmDealerRowInvalid {
+        background: #fef2f2;
+      }
+
+      .tmDealerRowNo {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 28px;
+        border: 1px solid var(--tm-line);
+        border-radius: 8px;
+        color: #64748b;
+        background: #f8fafc;
+        font-size: 12px;
+        font-weight: 850;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .tmDealerInputCode {
+        font-family: "Cascadia Code", Consolas, monospace;
+        letter-spacing: 0;
+      }
+
+      .tmSettingsFooter {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        padding: 16px 20px;
+        border-top: 1px solid var(--tm-line);
+        background: #ffffff;
+      }
+
+      .tmSettingsMsg {
+        color: #065f46;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .tmSettingsMsg.tmError {
+        color: #991b1b;
+      }
+
+      .tmBtnSmall,
+      .tmBtnPrimary {
+        height: 38px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 800;
+        transition: background .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .16s ease;
+      }
+
+      .tmBtnSmall {
+        padding: 0 12px;
+        border: 1px solid var(--tm-line-strong);
+        background: #ffffff;
+        color: #1f2937;
+      }
+
+      .tmBtnSmall:hover {
+        color: var(--tm-blue);
+        border-color: #93c5fd;
+        background: #f8fbff;
+      }
+
+      .tmBtnDanger {
+        color: #b91c1c;
+        border-color: #fecaca;
+        background: #fff7f7;
+      }
+
+      .tmBtnDanger:hover {
+        color: #991b1b;
+        border-color: #fca5a5;
+        background: #fef2f2;
+      }
+
+      .tmBtnPrimary {
+        min-width: 148px;
+        padding: 0 18px;
+        border: 1px solid var(--tm-blue);
+        background: var(--tm-blue);
+        color: #ffffff;
+        box-shadow: 0 8px 18px rgba(37, 99, 235, .18);
+      }
+
+      .tmBtnPrimary:hover {
+        background: var(--tm-blue-hover);
+        border-color: var(--tm-blue-hover);
+        transform: translateY(-1px);
+      }
+
+      .tmBtnSmall:disabled,
+      .tmBtnPrimary:disabled {
+        cursor: wait;
+        opacity: .62;
+        transform: none;
+        box-shadow: none;
+      }
 
       /* Modern readability polish: visual-only overrides, no behavior changes. */
       #tmClaimPanel {
@@ -4602,6 +5000,34 @@
         .tmInputLayout {
           grid-template-columns: 1fr;
         }
+
+        #tmTabSettings.active {
+          padding: 16px;
+        }
+
+        .tmSettingsHero,
+        .tmSettingsGrid,
+        .tmDealerToolbar,
+        .tmSettingsFooter {
+          grid-template-columns: 1fr;
+        }
+
+        .tmSettingsStats {
+          min-width: 0;
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .tmDealerActionGroup,
+        .tmSettingsActions {
+          justify-content: flex-start;
+        }
+
+        .tmDealerTableHeader,
+        .tmDealerRow {
+          grid-template-columns: 48px 110px minmax(180px, 1fr) 84px;
+          padding-left: 14px;
+          padding-right: 14px;
+        }
       }
     `;
 
@@ -4745,35 +5171,81 @@
           <div id="tmTerminal"></div>
         </div>
 
-        <div class="tmTabContent" id="tmTabSettings" style="padding: 24px; overflow: auto;">
-          <div class="tmInputPanel" style="padding: 24px; max-width: 800px; margin: 0 auto;">
-            <div class="tmSettingsSection">
-              <h3>General Settings</h3>
-              <div class="tmSettingsRow">
-                <label style="font-weight: 600; color: #4b5563; font-size: 14px;">Request Delay (ms):</label>
-                <input type="number" id="tmSettingDelay" class="tmSettingsInput" value="350" min="0" step="50">
+        <div class="tmTabContent" id="tmTabSettings">
+          <div class="tmSettingsWorkspace">
+            <section class="tmSettingsHero">
+              <div>
+                <p class="tmSettingsEyebrow">Settings</p>
+                <h2>Dealer Branch Map</h2>
+                <p>Map kode dealer dan nama branch Toyota.</p>
               </div>
-              <p class="tmHelpBox" style="margin-top: 4px;">Jeda waktu antar request untuk mencegah terblokir server.</p>
-            </div>
-
-            <div class="tmSettingsSection" style="margin-top: 32px;">
-              <h3 style="margin-bottom: 4px;">Dealer Branch Map</h3>
-              <p class="tmHelpBox" style="margin-bottom: 16px;">Pemetaan kode dealer dengan nama cabangnya.</p>
-
-              <div class="tmSettingsActions" style="margin-bottom: 12px; margin-top:0;">
-                <button type="button" id="tmBtnExportDealer" class="tmBtnSmall">Export JSON</button>
-                <input type="file" id="tmInputImportDealer" accept=".json" style="display:none">
-                <button type="button" id="tmBtnImportDealer" class="tmBtnSmall">Import JSON</button>
+              <div class="tmSettingsStats">
+                <div class="tmSettingsStat">
+                  <span>Total Branch</span>
+                  <strong id="tmDealerBranchCount">0</strong>
+                </div>
+                <div class="tmSettingsStat">
+                  <span>Last Sync</span>
+                  <strong id="tmDealerSyncTime">-</strong>
+                </div>
               </div>
-              <div id="tmDealerListContainer" class="tmDealerList">
-                <!-- dealer rows will be injected here -->
-              </div>
-              <button type="button" id="tmBtnAddDealer" class="tmBtnSmall">+ Tambah Dealer Baru</button>
-            </div>
+            </section>
 
-            <div class="tmSettingsSection" style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e7eb;">
-              <button type="button" id="tmBtnSaveSettings" class="tmBtnPrimary">Simpan Pengaturan</button>
-              <span id="tmSettingsMsg" style="margin-left: 12px; color: #059669; font-size: 14px; font-weight: 600; display: none;">Pengaturan berhasil disimpan!</span>
+            <div class="tmSettingsGrid">
+              <aside class="tmSettingsCard">
+                <div class="tmSettingsCardHeader">
+                  <div>
+                    <h3>General</h3>
+                    <p>Request dan koneksi data.</p>
+                  </div>
+                </div>
+                <div class="tmSettingsCardBody">
+                  <div class="tmSettingsField">
+                    <label for="tmSettingDelay">Request Delay</label>
+                    <input type="number" id="tmSettingDelay" class="tmSettingsInput" value="350" min="0" step="50">
+                  </div>
+                  <div class="tmSettingsField">
+                    <label>Database dealer</label>
+                    <span id="tmDealerOnlineStatus" class="tmDealerStatus">Menunggu database</span>
+                  </div>
+                  <p class="tmHelpBox">Branch online aktif.</p>
+                </div>
+              </aside>
+
+              <section class="tmSettingsCard">
+                <div class="tmSettingsCardHeader">
+                  <div>
+                    <h3>Branch Data</h3>
+                    <p>Kode dealer, nama branch, dan status sinkron.</p>
+                  </div>
+                  <button type="button" id="tmBtnAddDealer" class="tmBtnPrimary">Tambah Branch</button>
+                </div>
+
+                <div class="tmDealerToolbar">
+                  <input type="search" id="tmDealerSearchInput" class="tmSettingsInput" placeholder="Cari kode atau nama branch">
+                  <div class="tmDealerActionGroup">
+                    <button type="button" id="tmBtnRefreshDealerOnline" class="tmBtnSmall">Refresh</button>
+                    <button type="button" id="tmBtnExportDealer" class="tmBtnSmall">Export JSON</button>
+                    <input type="file" id="tmInputImportDealer" accept=".json" style="display:none">
+                    <button type="button" id="tmBtnImportDealer" class="tmBtnSmall">Import JSON</button>
+                  </div>
+                </div>
+
+                <div class="tmDealerTableHeader">
+                  <span>No</span>
+                  <span>Kode</span>
+                  <span>Nama Branch</span>
+                  <span>Aksi</span>
+                </div>
+                <div id="tmDealerListContainer" class="tmDealerList"></div>
+
+                <div class="tmSettingsFooter">
+                  <span id="tmSettingsMsg" class="tmSettingsMsg"></span>
+                  <div class="tmSettingsActions">
+                    <button type="button" id="tmBtnSaveSettings" class="tmBtnPrimary">Simpan Online</button>
+                  </div>
+                </div>
+              </section>
             </div>
           </div>
         </div>
@@ -4828,6 +5300,16 @@
       updateAuthStatus();
       updateListCount();
       updateVinBulkCount();
+      renderSettingsTab();
+
+      void refreshDealerBranchesFromSupabase({ render: false, silent: true })
+          .catch(err => {
+              saveDealerBranchMapLocal({});
+              setDealerBranchSyncState('error', 'database gagal');
+              setSettingsMessage(err.message || String(err), 'error');
+              updateDealerBranchSummary();
+              logTerminal(`database branch map belum tersinkron: ${err.message || err}`, 'warn');
+          });
   }
 
     function ensureToastHost() {
@@ -4860,41 +5342,368 @@
         }, 2600);
     }
 
+    function getSupabaseHeaders(extra = {}) {
+        return {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+            ...extra
+        };
+    }
+
+    async function readSupabaseError(response) {
+        const text = await response.text().catch(() => '');
+        if (!text) return `${response.status} ${response.statusText}`.trim();
+
+        try {
+            const json = JSON.parse(text);
+            return json.message || json.details || text;
+        } catch (_) {
+            return text;
+        }
+    }
+
+    function supabaseRequest(url, options = {}) {
+        if (typeof GM_xmlhttpRequest !== 'function') {
+            return Promise.reject(new Error('GM_xmlhttpRequest belum tersedia. Reinstall/update metadata Tampermonkey script ini.'));
+        }
+
+        return new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: options.method || 'GET',
+                url,
+                headers: options.headers || {},
+                data: options.body,
+                timeout: 30000,
+                onload: response => {
+                    const responseText = response.responseText || '';
+                    resolve({
+                        ok: response.status >= 200 && response.status < 300,
+                        status: response.status,
+                        statusText: response.statusText || '',
+                        text: async () => responseText,
+                        json: async () => responseText ? JSON.parse(responseText) : null
+                    });
+                },
+                onerror: response => {
+                    const status = response?.status ? ` (${response.status})` : '';
+                    reject(new Error(`Koneksi database gagal${status}. Periksa @connect koneksi internet.`));
+                },
+                ontimeout: () => {
+                    reject(new Error('Koneksi database timeout.'));
+                }
+            });
+        });
+    }
+
+    function setDealerBranchSyncState(type, message) {
+        dealerBranchSyncState = { type, message };
+
+        const el = document.getElementById('tmDealerOnlineStatus');
+        if (!el) return;
+
+        el.className = 'tmDealerStatus';
+        if (type === 'ok') el.classList.add('tmDealerStatusOk');
+        if (type === 'warn') el.classList.add('tmDealerStatusWarn');
+        if (type === 'error') el.classList.add('tmDealerStatusError');
+        el.textContent = message;
+    }
+
+    function setSettingsMessage(message, type = 'success') {
+        const msg = document.getElementById('tmSettingsMsg');
+        if (!msg) return;
+
+        msg.textContent = message || '';
+        msg.classList.toggle('tmError', type === 'error');
+    }
+
+    function formatDealerSyncTime(value) {
+        if (!value) return '-';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '-';
+
+        return date.toLocaleTimeString('id-ID', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+
+    function updateDealerBranchSummary() {
+        const countEl = document.getElementById('tmDealerBranchCount');
+        const syncEl = document.getElementById('tmDealerSyncTime');
+
+        if (countEl) countEl.textContent = String(Object.keys(DEALER_BRANCH_MAP).length);
+        if (syncEl) syncEl.textContent = formatDealerSyncTime(dealerBranchLastSyncAt);
+        setDealerBranchSyncState(dealerBranchSyncState.type, dealerBranchSyncState.message);
+    }
+
+    function saveDealerBranchMapLocal(map) {
+        DEALER_BRANCH_MAP = normalizeDealerBranchMap(map);
+        updateDealerBranchSummary();
+        refreshBranchNamesInResults();
+    }
+
+    async function refreshDealerBranchesFromSupabase({ render = true, silent = false } = {}) {
+        if (!silent) setSettingsMessage('');
+        setDealerBranchSyncState('warn', 'Mengambil data online...');
+
+        const query = 'select=branch_code,branch_name,is_active&is_active=eq.true&order=branch_code.asc';
+        const response = await supabaseRequest(`${SUPABASE_DEALER_BRANCH_ENDPOINT}?${query}`, {
+            method: 'GET',
+            headers: getSupabaseHeaders({ Prefer: 'return=representation' })
+        });
+
+        if (!response.ok) {
+            const error = await readSupabaseError(response);
+            throw new Error(error);
+        }
+
+        const rows = await response.json();
+        const nextMap = {};
+        for (const row of rows) {
+            const code = normalizeDealerBranchCode(row.branch_code);
+            const name = String(row.branch_name ?? '').trim();
+            if (code && name) nextMap[code] = name;
+        }
+
+        dealerBranchOnlineLoaded = true;
+
+        if (Object.keys(nextMap).length > 0) {
+            dealerBranchLastSyncAt = new Date().toISOString();
+            localStorage.setItem(DEALER_BRANCH_SYNCED_AT_STORAGE_KEY, dealerBranchLastSyncAt);
+            saveDealerBranchMapLocal(nextMap);
+            setDealerBranchSyncState('ok', 'Online tersinkron');
+            if (render) renderSettingsTab();
+            if (!silent) showToast('Data branch online berhasil dimuat.');
+        } else {
+            dealerBranchLastSyncAt = new Date().toISOString();
+            localStorage.setItem(DEALER_BRANCH_SYNCED_AT_STORAGE_KEY, dealerBranchLastSyncAt);
+            saveDealerBranchMapLocal({});
+            setDealerBranchSyncState('warn', 'Tabel online masih kosong');
+            if (render) renderSettingsTab();
+            if (!silent) showToast('Tabel database masih kosong.');
+        }
+    }
+
+    async function upsertDealerBranchesToSupabase(map) {
+        const rows = Object.entries(normalizeDealerBranchMap(map))
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([branch_code, branch_name]) => ({
+                branch_code,
+                branch_name,
+                is_active: true
+            }));
+
+        if (!rows.length) throw new Error('Minimal satu branch wajib diisi.');
+
+        const response = await supabaseRequest(`${SUPABASE_DEALER_BRANCH_ENDPOINT}?on_conflict=branch_code`, {
+            method: 'POST',
+            headers: getSupabaseHeaders({
+                Prefer: 'resolution=merge-duplicates,return=minimal'
+            }),
+            body: JSON.stringify(rows)
+        });
+
+        if (!response.ok) {
+            const error = await readSupabaseError(response);
+            throw new Error(error);
+        }
+    }
+
+    async function deleteDealerBranchFromSupabase(code) {
+        const normalizedCode = normalizeDealerBranchCode(code);
+        if (!normalizedCode) return;
+
+        const response = await supabaseRequest(`${SUPABASE_DEALER_BRANCH_ENDPOINT}?branch_code=eq.${encodeURIComponent(normalizedCode)}`, {
+            method: 'DELETE',
+            headers: getSupabaseHeaders({ Prefer: 'return=minimal' })
+        });
+
+        if (!response.ok) {
+            const error = await readSupabaseError(response);
+            throw new Error(error);
+        }
+    }
+
+    function collectDealerBranchMapFromUI() {
+        const rows = Array.from(document.querySelectorAll('.tmDealerRow'));
+        const nextMap = {};
+        const parsedRows = [];
+        const rowsByCode = new Map();
+
+        rows.forEach(row => row.classList.remove('tmDealerRowInvalid'));
+
+        for (const row of rows) {
+            const codeInput = row.querySelector('.tmDealerInputCode');
+            const nameInput = row.querySelector('.tmDealerInputName');
+            const code = normalizeDealerBranchCode(codeInput?.value);
+            const name = String(nameInput?.value ?? '').trim();
+
+            if (!code && !name) continue;
+
+            parsedRows.push({ row, code, name, codeInput });
+
+            if (code) {
+                const existing = rowsByCode.get(code) || [];
+                existing.push(row);
+                rowsByCode.set(code, existing);
+            }
+
+            if (!code || !name) {
+                row.classList.add('tmDealerRowInvalid');
+                throw new Error('Kode dan nama branch wajib diisi.');
+            }
+        }
+
+        const duplicateCodes = [];
+        rowsByCode.forEach((duplicateRows, code) => {
+            if (duplicateRows.length <= 1) return;
+            duplicateCodes.push(code);
+            duplicateRows.forEach(row => row.classList.add('tmDealerRowInvalid'));
+        });
+
+        if (duplicateCodes.length > 0) {
+            throw new Error(`Kode branch duplikat: ${duplicateCodes.join(', ')}`);
+        }
+
+        for (const item of parsedRows) {
+            nextMap[item.code] = item.name;
+            if (item.codeInput) {
+                item.codeInput.value = item.code;
+            }
+        }
+
+        return nextMap;
+    }
+
+    function setSettingsBusy(isBusy) {
+        document.querySelectorAll('#tmTabSettings button, #tmTabSettings input').forEach(el => {
+            if (el.id === 'tmDealerSearchInput') return;
+            el.disabled = isBusy;
+        });
+    }
+
+    async function saveSettingsOnline() {
+        try {
+            setSettingsBusy(true);
+            setSettingsMessage('');
+            setDealerBranchSyncState('warn', 'Menyimpan online...');
+
+            const delayInput = document.getElementById('tmSettingDelay')?.value;
+            REQUEST_DELAY_MS = parseInt(delayInput, 10) || DEFAULT_REQUEST_DELAY_MS;
+            localStorage.setItem('tm_request_delay_ms', REQUEST_DELAY_MS.toString());
+
+            const previousCodes = new Set(Object.keys(DEALER_BRANCH_MAP));
+            const nextMap = collectDealerBranchMapFromUI();
+            const removedCodes = Array.from(previousCodes)
+                .filter(code => !Object.prototype.hasOwnProperty.call(nextMap, code));
+
+            await upsertDealerBranchesToSupabase(nextMap);
+            for (const code of removedCodes) {
+                await deleteDealerBranchFromSupabase(code);
+            }
+
+            dealerBranchLastSyncAt = new Date().toISOString();
+            localStorage.setItem(DEALER_BRANCH_SYNCED_AT_STORAGE_KEY, dealerBranchLastSyncAt);
+            saveDealerBranchMapLocal(nextMap);
+            dealerBranchOnlineLoaded = true;
+
+            setDealerBranchSyncState('ok', 'Online tersimpan');
+            setSettingsMessage('Pengaturan tersimpan online.');
+            showToast('Branch map berhasil disimpan ke database.');
+            renderSettingsTab();
+        } catch (err) {
+            setDealerBranchSyncState('error', 'Gagal sinkron');
+            setSettingsMessage(err.message || String(err), 'error');
+            showToast('Gagal menyimpan branch map.');
+            logTerminal(`database branch save error: ${err.message || err}`, 'error');
+        } finally {
+            setSettingsBusy(false);
+        }
+    }
+
     function renderSettingsTab() {
         const delayInput = document.getElementById('tmSettingDelay');
-        if(delayInput) delayInput.value = REQUEST_DELAY_MS;
+        if (delayInput) delayInput.value = REQUEST_DELAY_MS;
 
         const container = document.getElementById('tmDealerListContainer');
-        if(!container) return;
+        if (!container) return;
         container.innerHTML = '';
 
-        for (const [code, name] of Object.entries(DEALER_BRANCH_MAP)) {
+        const entries = Object.entries(DEALER_BRANCH_MAP)
+            .sort(([a], [b]) => a.localeCompare(b));
+
+        for (const [code, name] of entries) {
             container.appendChild(createDealerRow(code, name));
         }
+
+        filterDealerRows();
+        updateDealerBranchSummary();
     }
 
     function createDealerRow(code = '', name = '') {
         const row = document.createElement('div');
         row.className = 'tmDealerRow';
+        row.dataset.savedCode = normalizeDealerBranchCode(code);
+
+        const rowNo = document.createElement('span');
+        rowNo.className = 'tmDealerRowNo';
+        rowNo.textContent = '-';
 
         const inputCode = document.createElement('input');
         inputCode.type = 'text';
         inputCode.className = 'tmSettingsInput tmDealerInputCode';
-        inputCode.placeholder = 'Kode';
-        inputCode.value = code;
+        inputCode.placeholder = 'TR15';
+        inputCode.value = normalizeDealerBranchCode(code);
+        inputCode.autocomplete = 'off';
 
         const inputName = document.createElement('input');
         inputName.type = 'text';
         inputName.className = 'tmSettingsInput tmDealerInputName';
-        inputName.placeholder = 'Nama Dealer';
+        inputName.placeholder = 'Nama branch';
         inputName.value = name;
+        inputName.autocomplete = 'off';
 
         const btnDelete = document.createElement('button');
         btnDelete.type = 'button';
         btnDelete.className = 'tmBtnSmall tmBtnDanger';
-        btnDelete.innerHTML = 'Hapus';
-        btnDelete.onclick = () => row.remove();
+        btnDelete.textContent = 'Hapus';
+        btnDelete.addEventListener('click', async () => {
+            const savedCode = row.dataset.savedCode || normalizeDealerBranchCode(inputCode.value);
 
+            if (!savedCode || !DEALER_BRANCH_MAP[savedCode]) {
+                row.remove();
+                updateDealerRowNumbers();
+                updateDealerBranchSummary();
+                return;
+            }
+
+            try {
+                setSettingsBusy(true);
+                setSettingsMessage('');
+                setDealerBranchSyncState('warn', `Menghapus ${savedCode}...`);
+                await deleteDealerBranchFromSupabase(savedCode);
+
+                const nextMap = { ...DEALER_BRANCH_MAP };
+                delete nextMap[savedCode];
+                dealerBranchLastSyncAt = new Date().toISOString();
+                localStorage.setItem(DEALER_BRANCH_SYNCED_AT_STORAGE_KEY, dealerBranchLastSyncAt);
+                saveDealerBranchMapLocal(nextMap);
+                setDealerBranchSyncState('ok', 'Online tersinkron');
+                setSettingsMessage(`${savedCode} dihapus dari database.`);
+                showToast(`Branch ${savedCode} dihapus.`);
+                renderSettingsTab();
+            } catch (err) {
+                setDealerBranchSyncState('error', 'Gagal hapus');
+                setSettingsMessage(err.message || String(err), 'error');
+                showToast('Gagal menghapus branch online.');
+                logTerminal(`database branch delete error: ${err.message || err}`, 'error');
+            } finally {
+                setSettingsBusy(false);
+            }
+        });
+
+        row.appendChild(rowNo);
         row.appendChild(inputCode);
         row.appendChild(inputName);
         row.appendChild(btnDelete);
@@ -4902,44 +5711,71 @@
         return row;
     }
 
+    function updateDealerRowNumbers() {
+        const rows = Array.from(document.querySelectorAll('.tmDealerRow'))
+            .filter(row => row.style.display !== 'none');
+
+        rows.forEach((row, index) => {
+            const no = row.querySelector('.tmDealerRowNo');
+            if (no) no.textContent = String(index + 1);
+        });
+    }
+
+    function filterDealerRows() {
+        const input = document.getElementById('tmDealerSearchInput');
+        const needle = String(input?.value || '').trim().toLowerCase();
+        const rows = Array.from(document.querySelectorAll('.tmDealerRow'));
+        let visible = 0;
+
+        for (const row of rows) {
+            const code = row.querySelector('.tmDealerInputCode')?.value || '';
+            const name = row.querySelector('.tmDealerInputName')?.value || '';
+            const match = !needle || `${code} ${name}`.toLowerCase().includes(needle);
+            row.style.display = match ? '' : 'none';
+            if (match) visible += 1;
+        }
+
+        updateDealerRowNumbers();
+
+        const countEl = document.getElementById('tmDealerBranchCount');
+        if (countEl) countEl.textContent = needle ? `${visible}/${rows.length}` : String(Object.keys(DEALER_BRANCH_MAP).length);
+    }
+
     function setupSettingsEvents() {
         document.getElementById('tmBtnAddDealer')?.addEventListener('click', () => {
             const container = document.getElementById('tmDealerListContainer');
-            if(container) {
-                container.appendChild(createDealerRow());
-                container.scrollTop = container.scrollHeight;
+            if (container) {
+                const row = createDealerRow();
+                container.prepend(row);
+                updateDealerRowNumbers();
+                row.querySelector('.tmDealerInputCode')?.focus();
             }
         });
 
         document.getElementById('tmBtnSaveSettings')?.addEventListener('click', () => {
-            const delayInput = document.getElementById('tmSettingDelay')?.value;
-            REQUEST_DELAY_MS = parseInt(delayInput, 10) || DEFAULT_REQUEST_DELAY_MS;
-            localStorage.setItem('tm_request_delay_ms', REQUEST_DELAY_MS.toString());
-
-            const rows = document.querySelectorAll('.tmDealerRow');
-            const newMap = {};
-            rows.forEach(row => {
-                const code = row.querySelector('.tmDealerInputCode').value.trim();
-                const name = row.querySelector('.tmDealerInputName').value.trim();
-                if (code) {
-                    newMap[code] = name;
-                }
-            });
-
-            DEALER_BRANCH_MAP = newMap;
-            localStorage.setItem('tm_dealer_branch_map', JSON.stringify(DEALER_BRANCH_MAP));
-
-            const msg = document.getElementById('tmSettingsMsg');
-            if(msg) {
-                msg.style.display = 'inline';
-                setTimeout(() => msg.style.display = 'none', 3000);
-            }
-            showToast('Pengaturan berhasil disimpan');
+            void saveSettingsOnline();
         });
+
+        document.getElementById('tmBtnRefreshDealerOnline')?.addEventListener('click', async () => {
+            try {
+                setSettingsBusy(true);
+                await refreshDealerBranchesFromSupabase({ render: true, silent: false });
+                setSettingsMessage('Data online berhasil dimuat.');
+            } catch (err) {
+                setDealerBranchSyncState('error', 'Gagal refresh');
+                setSettingsMessage(err.message || String(err), 'error');
+                showToast('Gagal refresh branch dari database.');
+                logTerminal(`database branch refresh error: ${err.message || err}`, 'error');
+            } finally {
+                setSettingsBusy(false);
+            }
+        });
+
+        document.getElementById('tmDealerSearchInput')?.addEventListener('input', filterDealerRows);
 
         const fileInput = document.getElementById('tmInputImportDealer');
         document.getElementById('tmBtnImportDealer')?.addEventListener('click', () => {
-            if(fileInput) fileInput.click();
+            if (fileInput) fileInput.click();
         });
 
         fileInput?.addEventListener('change', (e) => {
@@ -4949,46 +5785,38 @@
             const reader = new FileReader();
             reader.onload = (event) => {
                 try {
-                    const importedMap = JSON.parse(event.target.result);
-                    if (typeof importedMap === 'object' && importedMap !== null) {
-                        const container = document.getElementById('tmDealerListContainer');
-                        if(container) {
-                            container.innerHTML = '';
-                            for (const [code, name] of Object.entries(importedMap)) {
-                                container.appendChild(createDealerRow(code, name));
-                            }
-                            showToast('Berhasil mengimpor data dealer. Klik Simpan Pengaturan.');
-                        }
-                    } else {
-                        throw new Error('Format JSON tidak valid (harus berupa objek).');
+                    const importedMap = normalizeDealerBranchMap(JSON.parse(event.target.result));
+                    if (Object.keys(importedMap).length === 0) {
+                        throw new Error('Format JSON tidak valid atau kosong.');
                     }
+
+                    saveDealerBranchMapLocal(importedMap);
+                    renderSettingsTab();
+                    setSettingsMessage('Import berhasil. Data siap disimpan online.');
+                    showToast('Data branch berhasil diimpor.');
                 } catch (err) {
-                    alert('Gagal membaca file JSON: ' + err.message);
+                    setSettingsMessage('Gagal import JSON: ' + err.message, 'error');
+                    showToast('Gagal membaca file JSON.');
                 }
-                fileInput.value = ''; // reset
+                fileInput.value = '';
             };
             reader.readAsText(file);
         });
 
         document.getElementById('tmBtnExportDealer')?.addEventListener('click', () => {
-            const rows = document.querySelectorAll('.tmDealerRow');
-            const exportMap = {};
-            rows.forEach(row => {
-                const code = row.querySelector('.tmDealerInputCode').value.trim();
-                const name = row.querySelector('.tmDealerInputName').value.trim();
-                if (code) {
-                    exportMap[code] = name;
-                }
-            });
+            let exportMap = DEALER_BRANCH_MAP;
+            try {
+                exportMap = collectDealerBranchMapFromUI();
+            } catch (_) {}
 
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportMap, null, 2));
+            const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(exportMap, null, 2));
             const dlAnchorElem = document.createElement('a');
-            dlAnchorElem.setAttribute("href", dataStr);
-            dlAnchorElem.setAttribute("download", "dealer_map.json");
+            dlAnchorElem.setAttribute('href', dataStr);
+            dlAnchorElem.setAttribute('download', 'dealer_branch_map.json');
             document.body.appendChild(dlAnchorElem);
             dlAnchorElem.click();
             document.body.removeChild(dlAnchorElem);
-            showToast('Daftar dealer berhasil diekspor.');
+            showToast('Daftar branch berhasil diekspor.');
         });
     }
 
@@ -4997,14 +5825,7 @@
             const notify = () => {
                 const label = el.getAttribute('data-dummy-action') || 'Fitur ini';
                 if (label === 'Settings') {
-                    // Switch to Settings tab and render
-                    document.querySelectorAll('.tmTabContent').forEach(t => t.classList.remove('active'));
-                    const targetTab = document.getElementById('tmTabSettings');
-                    if(targetTab) targetTab.classList.add('active');
-
-                    document.querySelectorAll('.tmTabBtn').forEach(b => b.classList.remove('active')); // deselect inner tabs if needed
-
-                    renderSettingsTab();
+                    switchTab('settings');
                     return;
                 }
                 showToast(`${label} masih dalam proses pengembangan.`);
@@ -5228,5 +6049,4 @@
     waitDOMReady();
 
 })();
-
 
