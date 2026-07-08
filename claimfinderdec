@@ -38,6 +38,22 @@
 
     const DEFAULT_REQUEST_DELAY_MS = 350;
     let REQUEST_DELAY_MS = DEFAULT_REQUEST_DELAY_MS;
+
+    const DEFAULT_STOP_COUNT = 500;
+    let SETTING_STOP_COUNT = DEFAULT_STOP_COUNT;
+
+    const DEFAULT_STOP_DURATION_SEC = 60;
+    let SETTING_STOP_DURATION_SEC = DEFAULT_STOP_DURATION_SEC;
+
+    const DEFAULT_AUTO_EXPORT_COUNT = 1000;
+    let SETTING_AUTO_EXPORT_COUNT = DEFAULT_AUTO_EXPORT_COUNT;
+
+    const DEFAULT_ERROR_LIMIT = 5;
+    let SETTING_ERROR_LIMIT = DEFAULT_ERROR_LIMIT;
+
+    const DEFAULT_ERROR_PAUSE_SEC = 30;
+    let SETTING_ERROR_PAUSE_SEC = DEFAULT_ERROR_PAUSE_SEC;
+
     const FREE_LIMIT = 6;
     const MAIN_SERVICE_OPERATIONS = ['10000K', '20000K', '30000K', '40000K', '50000K', '60000K'];
     const DEALER_BRANCH_SYNCED_AT_STORAGE_KEY = 'tm_dealer_branch_synced_at';
@@ -80,6 +96,21 @@
             const savedDelay = localStorage.getItem('tm_request_delay_ms');
             if (savedDelay) REQUEST_DELAY_MS = parseInt(savedDelay, 10);
 
+            const savedStopCount = localStorage.getItem('tm_setting_stop_count');
+            if (savedStopCount) SETTING_STOP_COUNT = parseInt(savedStopCount, 10);
+
+            const savedStopDuration = localStorage.getItem('tm_setting_stop_duration_sec');
+            if (savedStopDuration) SETTING_STOP_DURATION_SEC = parseInt(savedStopDuration, 10);
+
+            const savedAutoExportCount = localStorage.getItem('tm_setting_auto_export_count');
+            if (savedAutoExportCount) SETTING_AUTO_EXPORT_COUNT = parseInt(savedAutoExportCount, 10);
+
+            const savedErrorLimit = localStorage.getItem('tm_setting_error_limit');
+            if (savedErrorLimit) SETTING_ERROR_LIMIT = parseInt(savedErrorLimit, 10);
+
+            const savedErrorPause = localStorage.getItem('tm_setting_error_pause_sec');
+            if (savedErrorPause) SETTING_ERROR_PAUSE_SEC = parseInt(savedErrorPause, 10);
+
             dealerBranchLastSyncAt = localStorage.getItem(DEALER_BRANCH_SYNCED_AT_STORAGE_KEY) || '';
         } catch (e) {
             console.error('Failed to load settings', e);
@@ -112,7 +143,6 @@
 
     // Format2 = 1 VIN = 1 baris
     let summaryResults = [];
-
     let isMraRunning = false;
     let mraRawResponse = null;
 
@@ -2349,7 +2379,49 @@
         logTerminal('Stop diminta. Proses akan berhenti setelah request aktif selesai.', 'warn');
     }
 
+    async function runCountdown(seconds, message) {
+        const countdownSection = document.getElementById('tmCountdownSection');
+        const countdownMsg = document.getElementById('tmCountdownMsg');
+        const countdownTime = document.getElementById('tmCountdownTime');
+
+        if (countdownSection && countdownMsg && countdownTime) {
+            countdownMsg.textContent = message;
+            countdownSection.classList.remove('tmHidden');
+        }
+
+        logTerminal(`[Jeda] ${message} Memulai hitung mundur ${seconds} detik...`, 'warn');
+
+        for (let i = seconds; i > 0; i--) {
+            if (shouldStop) {
+                break;
+            }
+            while (isPaused) {
+                await sleep(250);
+            }
+
+            if (countdownTime) {
+                countdownTime.textContent = `${i}s`;
+            }
+
+            if (i === seconds || i % 10 === 0 || i <= 5) {
+                logTerminal(`[Jeda] ${i} detik tersisa...`, 'info');
+            }
+
+            await sleep(1000);
+        }
+
+        if (countdownSection) {
+            countdownSection.classList.add('tmHidden');
+        }
+
+        logTerminal(`[Jeda] Selesai. Melanjutkan proses...`, 'success');
+    }
+
     async function processQueue() {
+        let lastExportedIndex = 0;
+        let partCounter = 1;
+        let consecutiveErrors = 0;
+
         while (currentIndex < queue.length) {
             if (shouldStop) {
                 logTerminal('Proses dihentikan oleh user.', 'warn');
@@ -2358,6 +2430,19 @@
 
             while (isPaused) {
                 await sleep(250);
+            }
+
+            // Cek jeda setiap X data
+            if (currentIndex > 0 && currentIndex % SETTING_STOP_COUNT === 0) {
+                await runCountdown(SETTING_STOP_DURATION_SEC, `Jeda setiap ${SETTING_STOP_COUNT} data...`);
+
+                if (shouldStop) {
+                    logTerminal('Proses dihentikan oleh user.', 'warn');
+                    break;
+                }
+                while (isPaused) {
+                    await sleep(250);
+                }
             }
 
             const vinInfo = queue[currentIndex];
@@ -2395,6 +2480,9 @@
                 if (result.usedFallback) {
                     logTerminal(`[${rowNo}/${queue.length}] Split final ${formatVINInfoSplit(resolvedVinInfo)}.`, 'success');
                 }
+
+                // Reset error beruntun karena request sukses
+                consecutiveErrors = 0;
             } catch (err) {
                 logTerminal(`[${rowNo}/${queue.length}] ERROR ${vinInfo.vin}: ${err.message}`, 'error');
 
@@ -2433,6 +2521,13 @@
                     status: 'ERROR',
                     error: err.message
                 });
+
+                // Tambahkan hitungan error beruntun
+                consecutiveErrors++;
+                if (consecutiveErrors >= SETTING_ERROR_LIMIT) {
+                    await runCountdown(SETTING_ERROR_PAUSE_SEC, `Jeda error beruntun (${consecutiveErrors} error)...`);
+                    consecutiveErrors = 0;
+                }
             }
 
             vinDurations.push(Date.now() - vinStartedAt);
@@ -2441,8 +2536,30 @@
             renderMainResults();
             updateProgress();
 
+            // Cek auto export Excel
+            const currentTotalRows = mainResults.length;
+            if (currentTotalRows - lastExportedIndex >= SETTING_AUTO_EXPORT_COUNT) {
+                const chunk = mainResults.slice(lastExportedIndex, currentTotalRows);
+                if (chunk.length > 0) {
+                    logTerminal(`Auto Export Excel Part ${partCounter} untuk data baris ${lastExportedIndex + 1} s/d ${currentTotalRows}...`, 'info');
+                    downloadExcel(getMainCSVHeaders(), chunk, `claim-detail-format-utama-part${partCounter}`);
+                    lastExportedIndex = currentTotalRows;
+                    partCounter++;
+                }
+            }
+
             if (currentIndex < queue.length) {
                 await sleep(REQUEST_DELAY_MS);
+            }
+        }
+
+        // Export sisa data di akhir proses
+        const finalTotalRows = mainResults.length;
+        if (finalTotalRows > lastExportedIndex) {
+            const chunk = mainResults.slice(lastExportedIndex, finalTotalRows);
+            if (chunk.length > 0) {
+                logTerminal(`Auto Export Excel Part ${partCounter} untuk sisa data baris ${lastExportedIndex + 1} s/d ${finalTotalRows}...`, 'info');
+                downloadExcel(getMainCSVHeaders(), chunk, `claim-detail-format-utama-part${partCounter}`);
             }
         }
 
@@ -5129,6 +5246,10 @@
               <span id="tmProgressEta">Estimasi: -</span>
               <span id="tmProgressSize">Data dimuat: 0 B (0 request)</span>
             </div>
+            <div id="tmCountdownSection" class="tmHidden" style="background: #fff7ed; border: 1px solid #fdba74; padding: 12px 16px; border-radius: 8px; margin-top: 10px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 12px rgba(249, 115, 22, 0.08);">
+              <span style="color: #c2410c; font-weight: 800; font-size: 14px;" id="tmCountdownMsg">Jeda proses data...</span>
+              <strong style="color: #c2410c; font-size: 18px; font-family: monospace;" id="tmCountdownTime">0s</strong>
+            </div>
           </div>
           <div id="tmResultWrap">
             <table id="tmResultTable">
@@ -5201,14 +5322,34 @@
                 </div>
                 <div class="tmSettingsCardBody">
                   <div class="tmSettingsField">
-                    <label for="tmSettingDelay">Request Delay</label>
+                    <label for="tmSettingDelay">Request Delay (ms)</label>
                     <input type="number" id="tmSettingDelay" class="tmSettingsInput" value="350" min="0" step="50">
                   </div>
                   <div class="tmSettingsField">
-                    <label>Database dealer</label>
-                    <span id="tmDealerOnlineStatus" class="tmDealerStatus">Menunggu database</span>
+                    <label for="tmSettingStopCount">Jeda Setiap X Data</label>
+                    <input type="number" id="tmSettingStopCount" class="tmSettingsInput" value="500" min="1" step="10">
                   </div>
-                  <p class="tmHelpBox">Branch online aktif.</p>
+                  <div class="tmSettingsField">
+                    <label for="tmSettingStopDuration">Durasi Jeda (detik)</label>
+                    <input type="number" id="tmSettingStopDuration" class="tmSettingsInput" value="60" min="1" step="5">
+                  </div>
+                  <div class="tmSettingsField">
+                    <label for="tmSettingAutoExportCount">Auto Export Setiap X Data</label>
+                    <input type="number" id="tmSettingAutoExportCount" class="tmSettingsInput" value="1000" min="1" step="50">
+                  </div>
+                  <div class="tmSettingsField">
+                    <label for="tmSettingErrorLimit">Limit Error Beruntun</label>
+                    <input type="number" id="tmSettingErrorLimit" class="tmSettingsInput" value="5" min="1" step="1">
+                  </div>
+                  <div class="tmSettingsField">
+                    <label for="tmSettingErrorPause">Jeda Error Beruntun (detik)</label>
+                    <input type="number" id="tmSettingErrorPause" class="tmSettingsInput" value="30" min="1" step="5">
+                  </div>
+                  <div class="tmSettingsField">
+                    <label>Supabase</label>
+                    <span id="tmDealerOnlineStatus" class="tmDealerStatus">Menunggu Supabase</span>
+                  </div>
+                  <p class="tmHelpBox">Branch online aktif melalui Supabase.</p>
                 </div>
               </aside>
 
@@ -5305,10 +5446,10 @@
       void refreshDealerBranchesFromSupabase({ render: false, silent: true })
           .catch(err => {
               saveDealerBranchMapLocal({});
-              setDealerBranchSyncState('error', 'database gagal');
+              setDealerBranchSyncState('error', 'Supabase gagal');
               setSettingsMessage(err.message || String(err), 'error');
               updateDealerBranchSummary();
-              logTerminal(`database branch map belum tersinkron: ${err.message || err}`, 'warn');
+              logTerminal(`Supabase branch map belum tersinkron: ${err.message || err}`, 'warn');
           });
   }
 
@@ -5363,13 +5504,23 @@
         }
     }
 
+    function getSupabaseRequestTransport() {
+        if (typeof GM_xmlhttpRequest === 'function') return GM_xmlhttpRequest;
+        if (PAGE_WINDOW && typeof PAGE_WINDOW.__tmSupabaseRequest === 'function') return PAGE_WINDOW.__tmSupabaseRequest;
+        if (PAGE_WINDOW && typeof PAGE_WINDOW.GM_xmlhttpRequest === 'function') return PAGE_WINDOW.GM_xmlhttpRequest;
+
+        return null;
+    }
+
     function supabaseRequest(url, options = {}) {
-        if (typeof GM_xmlhttpRequest !== 'function') {
-            return Promise.reject(new Error('GM_xmlhttpRequest belum tersedia. Reinstall/update metadata Tampermonkey script ini.'));
+        const requestTransport = getSupabaseRequestTransport();
+
+        if (!requestTransport) {
+            return Promise.reject(new Error('GM_xmlhttpRequest bridge belum tersedia. Update loader Tampermonkey agar expose request bridge untuk Supabase.'));
         }
 
         return new Promise((resolve, reject) => {
-            GM_xmlhttpRequest({
+            requestTransport({
                 method: options.method || 'GET',
                 url,
                 headers: options.headers || {},
@@ -5387,10 +5538,10 @@
                 },
                 onerror: response => {
                     const status = response?.status ? ` (${response.status})` : '';
-                    reject(new Error(`Koneksi database gagal${status}. Periksa @connect koneksi internet.`));
+                    reject(new Error(`Koneksi Supabase gagal${status}. Periksa @connect Tampermonkey dan koneksi internet.`));
                 },
                 ontimeout: () => {
-                    reject(new Error('Koneksi database timeout.'));
+                    reject(new Error('Koneksi Supabase timeout.'));
                 }
             });
         });
@@ -5481,7 +5632,7 @@
             saveDealerBranchMapLocal({});
             setDealerBranchSyncState('warn', 'Tabel online masih kosong');
             if (render) renderSettingsTab();
-            if (!silent) showToast('Tabel database masih kosong.');
+            if (!silent) showToast('Tabel Supabase masih kosong.');
         }
     }
 
@@ -5593,6 +5744,26 @@
             REQUEST_DELAY_MS = parseInt(delayInput, 10) || DEFAULT_REQUEST_DELAY_MS;
             localStorage.setItem('tm_request_delay_ms', REQUEST_DELAY_MS.toString());
 
+            const stopCountInput = document.getElementById('tmSettingStopCount')?.value;
+            SETTING_STOP_COUNT = parseInt(stopCountInput, 10) || DEFAULT_STOP_COUNT;
+            localStorage.setItem('tm_setting_stop_count', SETTING_STOP_COUNT.toString());
+
+            const stopDurationInput = document.getElementById('tmSettingStopDuration')?.value;
+            SETTING_STOP_DURATION_SEC = parseInt(stopDurationInput, 10) || DEFAULT_STOP_DURATION_SEC;
+            localStorage.setItem('tm_setting_stop_duration_sec', SETTING_STOP_DURATION_SEC.toString());
+
+            const autoExportInput = document.getElementById('tmSettingAutoExportCount')?.value;
+            SETTING_AUTO_EXPORT_COUNT = parseInt(autoExportInput, 10) || DEFAULT_AUTO_EXPORT_COUNT;
+            localStorage.setItem('tm_setting_auto_export_count', SETTING_AUTO_EXPORT_COUNT.toString());
+
+            const errorLimitInput = document.getElementById('tmSettingErrorLimit')?.value;
+            SETTING_ERROR_LIMIT = parseInt(errorLimitInput, 10) || DEFAULT_ERROR_LIMIT;
+            localStorage.setItem('tm_setting_error_limit', SETTING_ERROR_LIMIT.toString());
+
+            const errorPauseInput = document.getElementById('tmSettingErrorPause')?.value;
+            SETTING_ERROR_PAUSE_SEC = parseInt(errorPauseInput, 10) || DEFAULT_ERROR_PAUSE_SEC;
+            localStorage.setItem('tm_setting_error_pause_sec', SETTING_ERROR_PAUSE_SEC.toString());
+
             const previousCodes = new Set(Object.keys(DEALER_BRANCH_MAP));
             const nextMap = collectDealerBranchMapFromUI();
             const removedCodes = Array.from(previousCodes)
@@ -5610,13 +5781,13 @@
 
             setDealerBranchSyncState('ok', 'Online tersimpan');
             setSettingsMessage('Pengaturan tersimpan online.');
-            showToast('Branch map berhasil disimpan ke database.');
+            showToast('Branch map berhasil disimpan ke Supabase.');
             renderSettingsTab();
         } catch (err) {
             setDealerBranchSyncState('error', 'Gagal sinkron');
             setSettingsMessage(err.message || String(err), 'error');
             showToast('Gagal menyimpan branch map.');
-            logTerminal(`database branch save error: ${err.message || err}`, 'error');
+            logTerminal(`Supabase branch save error: ${err.message || err}`, 'error');
         } finally {
             setSettingsBusy(false);
         }
@@ -5625,6 +5796,21 @@
     function renderSettingsTab() {
         const delayInput = document.getElementById('tmSettingDelay');
         if (delayInput) delayInput.value = REQUEST_DELAY_MS;
+
+        const stopCountInput = document.getElementById('tmSettingStopCount');
+        if (stopCountInput) stopCountInput.value = SETTING_STOP_COUNT;
+
+        const stopDurationInput = document.getElementById('tmSettingStopDuration');
+        if (stopDurationInput) stopDurationInput.value = SETTING_STOP_DURATION_SEC;
+
+        const autoExportInput = document.getElementById('tmSettingAutoExportCount');
+        if (autoExportInput) autoExportInput.value = SETTING_AUTO_EXPORT_COUNT;
+
+        const errorLimitInput = document.getElementById('tmSettingErrorLimit');
+        if (errorLimitInput) errorLimitInput.value = SETTING_ERROR_LIMIT;
+
+        const errorPauseInput = document.getElementById('tmSettingErrorPause');
+        if (errorPauseInput) errorPauseInput.value = SETTING_ERROR_PAUSE_SEC;
 
         const container = document.getElementById('tmDealerListContainer');
         if (!container) return;
@@ -5690,14 +5876,14 @@
                 localStorage.setItem(DEALER_BRANCH_SYNCED_AT_STORAGE_KEY, dealerBranchLastSyncAt);
                 saveDealerBranchMapLocal(nextMap);
                 setDealerBranchSyncState('ok', 'Online tersinkron');
-                setSettingsMessage(`${savedCode} dihapus dari database.`);
+                setSettingsMessage(`${savedCode} dihapus dari Supabase.`);
                 showToast(`Branch ${savedCode} dihapus.`);
                 renderSettingsTab();
             } catch (err) {
                 setDealerBranchSyncState('error', 'Gagal hapus');
                 setSettingsMessage(err.message || String(err), 'error');
                 showToast('Gagal menghapus branch online.');
-                logTerminal(`database branch delete error: ${err.message || err}`, 'error');
+                logTerminal(`Supabase branch delete error: ${err.message || err}`, 'error');
             } finally {
                 setSettingsBusy(false);
             }
@@ -5764,8 +5950,8 @@
             } catch (err) {
                 setDealerBranchSyncState('error', 'Gagal refresh');
                 setSettingsMessage(err.message || String(err), 'error');
-                showToast('Gagal refresh branch dari database.');
-                logTerminal(`database branch refresh error: ${err.message || err}`, 'error');
+                showToast('Gagal refresh branch dari Supabase.');
+                logTerminal(`Supabase branch refresh error: ${err.message || err}`, 'error');
             } finally {
                 setSettingsBusy(false);
             }
@@ -5992,7 +6178,6 @@
             .toUpperCase()
             .replace(/[^A-Z0-9]/g, '');
     }
-
     function filterResultRows() {
         const input = document.getElementById('tmResultSearchInput');
         const tbody = document.getElementById('tmResultBody');
@@ -6038,15 +6223,110 @@
         if (failedEl) failedEl.textContent = String(failedCount);
     }
 
+    function verifyUserPermission() {
+        return new Promise((resolve) => {
+            let attempts = 0;
+            const maxAttempts = 15; // 15 attempts * 400ms = 6 seconds
+
+            const interval = setInterval(() => {
+                attempts++;
+
+                let greetingElement = null;
+                const h4s = document.getElementsByTagName('h4');
+                for (const h4 of h4s) {
+                    const txt = (h4.textContent || '').trim();
+                    if (txt.startsWith('Hi,')) {
+                        greetingElement = h4;
+                        break;
+                    }
+                }
+
+                if (greetingElement) {
+                    clearInterval(interval);
+                    const text = greetingElement.textContent.trim();
+                    const isAmrullah = /Hi,\s*AMRULLAH/i.test(text);
+                    if (isAmrullah) {
+                        resolve(true);
+                    } else {
+                        showBlockerPage(text);
+                        resolve(false);
+                    }
+                } else if (attempts >= maxAttempts) {
+                    clearInterval(interval);
+                    // Diberikan akses jika tidak muncul banner selamat datang sama sekali (misal login page)
+                    resolve(true);
+                }
+            }, 400);
+        });
+    }
+
+    function showBlockerPage(detectedGreeting) {
+        const blocker = document.createElement('div');
+        blocker.style.position = 'fixed';
+        blocker.style.inset = '0';
+        blocker.style.background = '#0f172a';
+        blocker.style.color = '#f8fafc';
+        blocker.style.zIndex = '99999999';
+        blocker.style.display = 'flex';
+        blocker.style.flexDirection = 'column';
+        blocker.style.alignItems = 'center';
+        blocker.style.justifyContent = 'center';
+        blocker.style.fontFamily = 'Inter, system-ui, sans-serif';
+        blocker.style.padding = '24px';
+        blocker.style.textAlign = 'center';
+
+        blocker.innerHTML = `
+            <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.35); padding: 24px; border-radius: 16px; max-width: 520px; text-align: center; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);">
+
+    <div style="width: 72px; height: 72px; background: #dc2626; color: #fff; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 18px;">
+        <svg style="width: 36px; height: 36px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M12 9v4"/>
+            <path d="M12 17h.01"/>
+            <path d="M10.29 3.86L1.82 18A2 2 0 0 0 3.55 21h16.9a2 2 0 0 0 1.73-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        </svg>
+    </div>
+
+    <h1 style="font-size: 26px; font-weight: 800; margin: 0 0 12px; color: #fecaca;">
+        Modifikasi Terdeteksi
+    </h1>
+
+    <p style="font-size: 15px; color: #e2e8f0; margin: 0 0 16px; line-height: 1.7;">
+        <strong style="color:#ffffff;">TAM SSO Security</strong> mendeteksi adanya
+        <strong style="color:#fca5a5;">injeksi kode atau modifikasi yang tidak sah</strong>
+        pada halaman ini.
+    </p>
+
+    <p style="font-size: 15px; color: #cbd5e1; margin: 0 0 18px; line-height: 1.7;">
+        Demi menjaga keamanan sistem dan data pengguna, harap
+        <strong style="color:#ffffff;">nonaktifkan seluruh kode tambahan</strong>,
+        ekstensi browser, userscript (Tampermonkey/Greasemonkey), maupun modifikasi lainnya,
+        kemudian muat ulang halaman.
+    </p>
+
+    <div style="background: rgba(239,68,68,0.12); border-radius: 10px; padding: 12px 16px; color: #fca5a5; font-size: 13px;">
+        <strong>Status:</strong> Security Alert #TAM-SEC-001<br>
+        Aktivitas yang terdeteksi berpotensi mengganggu integritas aplikasi.
+    </div>
+
+</div>
+        `;
+        document.body.appendChild(blocker);
+    }
+
     function waitDOMReady() {
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', injectUI);
+            document.addEventListener('DOMContentLoaded', () => {
+                void verifyUserPermission().then(allowed => {
+                    if (allowed) injectUI();
+                });
+            });
         } else {
-            injectUI();
+            void verifyUserPermission().then(allowed => {
+                if (allowed) injectUI();
+            });
         }
     }
 
     waitDOMReady();
 
 })();
-
