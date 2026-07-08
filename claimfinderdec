@@ -21,6 +21,7 @@
    ************************************************************/
     const API_URL = 'https://passport.toyota.astra.co.id:5004/api/ClaimDealerOTH/Detail/onVisChange';
     const VIN_DDL_URL = 'https://passport.toyota.astra.co.id:5004/api/ClaimDealerOTH/postDetailDdl';
+    const ALLOWED_USERS = ['AMRULLAH'];
 
     const DEFAULT_BODY = {
         dataClaimId: 0,
@@ -2402,7 +2403,7 @@
             if (countdownTime) {
                 countdownTime.textContent = `${i}s`;
             }
-
+            
             if (i === seconds || i % 10 === 0 || i <= 5) {
                 logTerminal(`[Jeda] ${i} detik tersisa...`, 'info');
             }
@@ -2413,7 +2414,7 @@
         if (countdownSection) {
             countdownSection.classList.add('tmHidden');
         }
-
+        
         logTerminal(`[Jeda] Selesai. Melanjutkan proses...`, 'success');
     }
 
@@ -2435,7 +2436,7 @@
             // Cek jeda setiap X data
             if (currentIndex > 0 && currentIndex % SETTING_STOP_COUNT === 0) {
                 await runCountdown(SETTING_STOP_DURATION_SEC, `Jeda setiap ${SETTING_STOP_COUNT} data...`);
-
+                
                 if (shouldStop) {
                     logTerminal('Proses dihentikan oleh user.', 'warn');
                     break;
@@ -6244,8 +6245,9 @@
                 if (greetingElement) {
                     clearInterval(interval);
                     const text = greetingElement.textContent.trim();
-                    const isAmrullah = /Hi,\s*AMRULLAH/i.test(text);
-                    if (isAmrullah) {
+                    const allowedPattern = new RegExp(`Hi,\\s*(${ALLOWED_USERS.join('|')})`, 'i');
+                    const isAllowed = allowedPattern.test(text);
+                    if (isAllowed) {
                         resolve(true);
                     } else {
                         showBlockerPage(text);
@@ -6276,39 +6278,19 @@
         blocker.style.textAlign = 'center';
 
         blocker.innerHTML = `
-            <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.35); padding: 24px; border-radius: 16px; max-width: 520px; text-align: center; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);">
-
-    <div style="width: 72px; height: 72px; background: #dc2626; color: #fff; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 18px;">
-        <svg style="width: 36px; height: 36px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M12 9v4"/>
-            <path d="M12 17h.01"/>
-            <path d="M10.29 3.86L1.82 18A2 2 0 0 0 3.55 21h16.9a2 2 0 0 0 1.73-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-        </svg>
-    </div>
-
-    <h1 style="font-size: 26px; font-weight: 800; margin: 0 0 12px; color: #fecaca;">
-        Modifikasi Terdeteksi
-    </h1>
-
-    <p style="font-size: 15px; color: #e2e8f0; margin: 0 0 16px; line-height: 1.7;">
-        <strong style="color:#ffffff;">TAM SSO Security</strong> mendeteksi adanya
-        <strong style="color:#fca5a5;">injeksi kode atau modifikasi yang tidak sah</strong>
-        pada halaman ini.
-    </p>
-
-    <p style="font-size: 15px; color: #cbd5e1; margin: 0 0 18px; line-height: 1.7;">
-        Demi menjaga keamanan sistem dan data pengguna, harap
-        <strong style="color:#ffffff;">nonaktifkan seluruh kode tambahan</strong>,
-        ekstensi browser, userscript (Tampermonkey/Greasemonkey), maupun modifikasi lainnya,
-        kemudian muat ulang halaman.
-    </p>
-
-    <div style="background: rgba(239,68,68,0.12); border-radius: 10px; padding: 12px 16px; color: #fca5a5; font-size: 13px;">
-        <strong>Status:</strong> Security Alert #TAM-SEC-001<br>
-        Aktivitas yang terdeteksi berpotensi mengganggu integritas aplikasi.
-    </div>
-
-</div>
+            <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); padding: 24px; border-radius: 16px; max-width: 480px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);">
+                <div style="width: 64px; height: 64px; background: #ef4444; color: #fff; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 16px;">
+                    <svg style="width: 32px; height: 32px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/>
+                    </svg>
+                </div>
+                <h1 style="font-size: 24px; font-weight: 800; margin: 0 0 8px; color: #fecaca;">Need permission</h1>
+                <p style="font-size: 15px; color: #94a3b8; margin: 0 0 16px; line-height: 1.5;">
+                    Anda terdeteksi masuk sebagai <strong style="color: #f1f5f9;">${escapeHtml(detectedGreeting)}</strong>.<br>
+                    Skrip ini hanya diperuntukkan untuk akun <strong>${escapeHtml(ALLOWED_USERS.join(', '))}</strong>.
+                </p>
+                <div style="font-size: 12px; color: #64748b;">Silakan hubungi administrator untuk mendapatkan akses.</div>
+            </div>
         `;
         document.body.appendChild(blocker);
     }
